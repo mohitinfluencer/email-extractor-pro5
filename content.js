@@ -206,14 +206,14 @@
         },
 
         /**
-         * Clean email - remove stuck suffixes
+         * Clean email - remove stuck suffixes like "phone", "read", etc.
          */
         cleanEmail(email) {
             if (!email || typeof email !== 'string') return null;
 
             let cleaned = email.trim().toLowerCase();
 
-            // Remove leading junk
+            // Remove leading junk characters
             cleaned = cleaned.replace(/^[-_.,;:!?#@&*()[\]{}|\\/\<\>'"=+`~^]+/, '');
             cleaned = cleaned.replace(/^mailto:/i, '');
 
@@ -223,33 +223,58 @@
             const localPart = cleaned.substring(0, atIndex);
             let domainPart = cleaned.substring(atIndex + 1);
 
-            // Extract valid domain (stops at junk suffix)
-            const domainMatch = domainPart.match(/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24}/i);
+            // STRICT TLD EXTRACTION: Match domain ending with valid TLD only
+            // This regex captures: domain.tld or subdomain.domain.tld
+            // It stops at the first valid TLD and ignores trailing junk
+            const validTLDs = [
+                'com', 'in', 'org', 'net', 'co', 'io', 'me', 'info', 'biz', 'edu', 'gov',
+                'xyz', 'app', 'dev', 'ai', 'tech', 'online', 'site', 'store', 'shop',
+                'uk', 'us', 'au', 'ca', 'de', 'fr', 'jp', 'cn', 'ru', 'br', 'it', 'es',
+                'co\\.uk', 'co\\.in', 'com\\.au', 'co\\.nz', 'co\\.za', 'org\\.uk', 'org\\.in'
+            ];
+
+            // Build regex to match domain ending at valid TLD
+            const tldPattern = new RegExp(
+                `^([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+?(${validTLDs.join('|')})(?![a-z])`,
+                'i'
+            );
+
+            const domainMatch = domainPart.match(tldPattern);
             if (domainMatch) {
                 domainPart = domainMatch[0];
             } else {
-                // Fallback: remove known junk suffixes
+                // Fallback: Try to extract just the domain part before junk words
                 for (const suffix of this.JUNK_SUFFIXES) {
-                    const pattern = new RegExp(`(\\.[a-z]{2,10})${suffix}.*$`, 'i');
-                    const match = domainPart.match(pattern);
-                    if (match) {
-                        domainPart = domainPart.substring(0, domainPart.indexOf(suffix));
+                    const suffixIndex = domainPart.toLowerCase().indexOf(suffix);
+                    if (suffixIndex > 0) {
+                        // Check if it's right after a TLD
+                        const before = domainPart.substring(0, suffixIndex);
+                        if (/\.(com|in|org|net|co|io|me|xyz|info)$/i.test(before)) {
+                            domainPart = before;
+                            break;
+                        }
                     }
                 }
             }
 
-            // Remove trailing junk
+            // Remove any trailing junk characters
             domainPart = domainPart.replace(/[-_.,;:!?#&*()[\]{}|\\/\<\>'"=+`~^]+$/, '');
 
             cleaned = localPart + '@' + domainPart;
 
-            // Final validation
+            // Final strict validation
             if (!cleaned.includes('@') || !cleaned.includes('.')) return null;
             if (cleaned.length < 6) return null;
 
-            // Extract valid email if still has junk
-            const finalMatch = cleaned.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,24}/);
-            return finalMatch ? finalMatch[0] : null;
+            // FINAL STRICT REGEX: Must match email format exactly
+            const finalMatch = cleaned.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,10}$/);
+            if (!finalMatch) {
+                // Try to extract valid email from the middle
+                const extractMatch = cleaned.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,10}/);
+                return extractMatch ? extractMatch[0] : null;
+            }
+
+            return finalMatch[0];
         },
 
         /**

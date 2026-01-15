@@ -359,6 +359,17 @@ const SocialExtractor = {
             const currentDomain = this.getCurrentDomain();
             const candidates = new Map(); // url -> {platform, url, score, username}
 
+            // FIRST: Add current page domain as highest priority website
+            if (currentDomain && !this.isBlacklistedDomain(currentDomain)) {
+                const currentRootUrl = `https://${currentDomain}`;
+                candidates.set(currentDomain, {
+                    platform: 'website',
+                    url: currentRootUrl,
+                    username: currentDomain,
+                    score: 100 // Highest priority - current page
+                });
+            }
+
             // Source 1: Anchor tags
             this.extractFromAnchors(doc, candidates, currentDomain);
 
@@ -434,6 +445,123 @@ const SocialExtractor = {
         } catch {
             return '';
         }
+    },
+
+    /**
+     * Get current page origin (full root URL)
+     */
+    getCurrentOrigin() {
+        try {
+            const origin = window.location?.origin || '';
+            if (origin && origin.startsWith('http')) {
+                return origin.replace('www.', '');
+            }
+            return '';
+        } catch {
+            return '';
+        }
+    },
+
+    /**
+     * STRICT validator for website URLs - rejects all junk
+     */
+    isValidWebsiteUrl(url) {
+        if (!url || typeof url !== 'string') return false;
+
+        // Must start with http:// or https://
+        if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
+
+        // REJECT: Contains @ (email-like)
+        if (url.includes('@')) return false;
+
+        // REJECT: Contains + (phone number-like)
+        if (url.includes('+')) return false;
+
+        try {
+            const parsed = new URL(url);
+            const hostname = parsed.hostname.toLowerCase();
+
+            // Hostname MUST contain a dot
+            if (!hostname.includes('.')) return false;
+
+            // REJECT: Pure numeric hostnames (phone numbers or IPs)
+            if (/^[\d.]+$/.test(hostname)) return false;
+
+            // REJECT: File extensions (not web pages)
+            const pathname = parsed.pathname.toLowerCase();
+            if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|pdf|zip|mp3|mp4)$/i.test(pathname)) {
+                return false;
+            }
+
+            return true;
+        } catch {
+            return false;
+        }
+    },
+
+    /**
+     * Check if a domain is blacklisted (CDN, email providers, ads, etc.)
+     */
+    isBlacklistedDomain(hostname) {
+        if (!hostname) return true;
+
+        const h = hostname.toLowerCase().replace('www.', '');
+
+        // Email providers - NEVER extract as websites
+        const EMAIL_PROVIDERS = [
+            'gmail.com', 'mail.google.com', 'googlemail.com',
+            'yahoo.com', 'mail.yahoo.com', 'ymail.com',
+            'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+            'icloud.com', 'me.com', 'mac.com',
+            'aol.com', 'protonmail.com', 'proton.me',
+            'zoho.com', 'mail.com', 'gmx.com', 'gmx.net',
+            'yandex.com', 'yandex.ru', 'rediffmail.com'
+        ];
+
+        for (const provider of EMAIL_PROVIDERS) {
+            if (h === provider || h.endsWith('.' + provider)) {
+                return true;
+            }
+        }
+
+        // Blacklisted system domains
+        const BLACKLIST = [
+            // Google
+            'google.com', 'google.co', 'google.in', 'google.co.in', 'google.co.uk',
+            'googleapis.com', 'gstatic.com', 'googleusercontent.com',
+            'googleadservices.com', 'googlesyndication.com', 'googletagmanager.com',
+            'doubleclick.net', 'googlevideo.com', 'googleanalytics.com',
+
+            // Standards
+            'w3.org', 'schema.org',
+
+            // CDNs
+            'cloudflare.com', 'jsdelivr.net', 'unpkg.com', 'bootstrapcdn.com',
+            'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com',
+
+            // Social (handled separately)
+            'facebook.com', 'fb.com', 'instagram.com', 'twitter.com', 'x.com',
+            'linkedin.com', 'youtube.com', 'youtu.be', 'tiktok.com',
+            'whatsapp.com', 'wa.me', 'whatsapp.net',
+            'pinterest.com', 'reddit.com', 'telegram.org', 't.me',
+
+            // Ad networks
+            'facebook.net', 'fbcdn.net', 'twimg.com',
+            'amazon-adsystem.com', 'criteo.com', 'outbrain.com', 'taboola.com'
+        ];
+
+        for (const blocked of BLACKLIST) {
+            if (h === blocked || h.endsWith('.' + blocked)) {
+                return true;
+            }
+        }
+
+        // Pattern-based blacklist
+        if (/^(cdn|static|assets|api|img|images|media|ads?|tracking|pixel)\./i.test(h)) {
+            return true;
+        }
+
+        return false;
     },
 
     /**
@@ -648,14 +776,28 @@ const SocialExtractor = {
      */
     detectWebsite(url, candidates, currentDomain, baseScore) {
         try {
+            // ===== FIRST: Use strict validator =====
+            if (!this.isValidWebsiteUrl(url)) {
+                return; // Reject invalid URLs immediately
+            }
+
             const parsed = new URL(url);
             const hostname = parsed.hostname.replace('www.', '').toLowerCase();
             const pathname = parsed.pathname.toLowerCase();
 
             // ===== STRICT BLACKLIST =====
 
-            // Blacklisted domains - CDN, ads, system, tracking
+            // Blacklisted domains - CDN, ads, system, tracking, EMAIL PROVIDERS
             const DOMAIN_BLACKLIST = [
+                // EMAIL PROVIDERS - NEVER extract as websites
+                'gmail.com', 'mail.google.com', 'googlemail.com',
+                'yahoo.com', 'mail.yahoo.com', 'ymail.com',
+                'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+                'icloud.com', 'me.com', 'mac.com',
+                'aol.com', 'protonmail.com', 'proton.me',
+                'zoho.com', 'mail.com', 'gmx.com', 'gmx.net',
+                'yandex.com', 'yandex.ru', 'rediffmail.com',
+
                 // Google ecosystem
                 'google.com', 'google.co', 'google.in', 'google.co.in', 'google.co.uk',
                 'googleapis.com', 'gstatic.com', 'googleusercontent.com',
