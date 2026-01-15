@@ -540,6 +540,13 @@ const SocialExtractor = {
             'whatsapp': ['whatsapp', 'wa', 'chat']
         };
 
+        // Website-related keywords that boost score
+        const websiteKeywords = ['website', 'portfolio', 'official', 'home', 'visit', 'my site',
+            'our site', 'homepage', 'main site', 'company site'];
+
+        // Contact section keywords
+        const contactKeywords = ['contact', 'email us', 'call us', 'about', 'connect', 'reach us', 'get in touch'];
+
         doc.querySelectorAll('a[href]').forEach(anchor => {
             const href = anchor.getAttribute('href');
             const text = (anchor.textContent || '').toLowerCase();
@@ -551,15 +558,40 @@ const SocialExtractor = {
 
             try {
                 const cleanedUrl = this.cleanUrl(this.resolveUrl(href));
-                if (!cleanedUrl || !candidates.has(cleanedUrl)) return;
+                if (!cleanedUrl) return;
 
-                const candidate = candidates.get(cleanedUrl);
+                // Try to find matching candidate (by hostname for websites)
+                let candidate = candidates.get(cleanedUrl);
+
+                // Also check by hostname for website matching
+                if (!candidate) {
+                    try {
+                        const parsed = new URL(cleanedUrl);
+                        const hostnameKey = parsed.hostname.toLowerCase();
+                        candidate = candidates.get(hostnameKey);
+                    } catch { }
+                }
+
+                if (!candidate) return;
 
                 // Check for platform keywords
                 for (const [platform, keywords] of Object.entries(platformKeywords)) {
                     if (keywords.some(kw => fullText.includes(kw))) {
                         candidate.score += 5;
                         break;
+                    }
+                }
+
+                // Check for website-specific keywords (+6 bonus)
+                if (candidate.platform === 'website') {
+                    if (websiteKeywords.some(kw => fullText.includes(kw))) {
+                        candidate.score += 6;
+                    }
+
+                    // Check if in contact section context
+                    const parentText = (anchor.closest('section, div, aside')?.textContent || '').toLowerCase().slice(0, 500);
+                    if (contactKeywords.some(kw => parentText.includes(kw))) {
+                        candidate.score += 3;
                     }
                 }
 
@@ -612,40 +644,227 @@ const SocialExtractor = {
     },
 
     /**
-     * Detect personal website
+     * Detect personal/business website - STRICT QUALITY FILTER
      */
     detectWebsite(url, candidates, currentDomain, baseScore) {
         try {
             const parsed = new URL(url);
             const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+            const pathname = parsed.pathname.toLowerCase();
+
+            // ===== STRICT BLACKLIST =====
+
+            // Blacklisted domains - CDN, ads, system, tracking
+            const DOMAIN_BLACKLIST = [
+                // Google ecosystem
+                'google.com', 'google.co', 'google.in', 'google.co.in', 'google.co.uk',
+                'googleapis.com', 'gstatic.com', 'googleusercontent.com',
+                'googleadservices.com', 'googlesyndication.com', 'googletagmanager.com',
+                'googletagservices.com', 'googlevideo.com', 'googleanalytics.com',
+                'doubleclick.net', 'adsense.com', 'adservice.google.com',
+                'pagead2.googlesyndication.com', 'googleads.g.doubleclick.net',
+
+                // Standards/specs
+                'w3.org', 'schema.org', 'xml.org', 'json-ld.org',
+
+                // CDNs
+                'cloudflare.com', 'cloudflare-dns.com', 'cdnjs.cloudflare.com',
+                'jsdelivr.net', 'unpkg.com', 'maxcdn.bootstrapcdn.com',
+                'cdn.jsdelivr.net', 'bootstrapcdn.com', 'ajax.googleapis.com',
+                'cdnjs.com', 'staticfile.org', 'staticlly.com',
+
+                // Fonts/assets
+                'fonts.googleapis.com', 'fonts.gstatic.com', 'fontawesome.com',
+                'use.fontawesome.com', 'kit.fontawesome.com',
+                'typekit.net', 'use.typekit.net',
+
+                // Tracking/analytics
+                'analytics.google.com', 'gtm.google.com', 'optimize.google.com',
+                'hotjar.com', 'mouseflow.com', 'clarity.ms', 'newrelic.com',
+                'segment.io', 'segment.com', 'mixpanel.com', 'amplitude.com',
+                'fullstory.com', 'crazyegg.com', 'inspectlet.com',
+
+                // Ad networks
+                'facebook.net', 'fbcdn.net', 'connect.facebook.net',
+                'static.xx.fbcdn.net', 'platform-lookaside.fbsbx.com',
+                'amazon-adsystem.com', 'serving-sys.com', 'adsrvr.org',
+                'criteo.com', 'outbrain.com', 'taboola.com', 'bidswitch.net',
+
+                // Infrastructure
+                'aws.amazon.com', 'amazonaws.com', 's3.amazonaws.com',
+                'azure.microsoft.com', 'digitalocean.com', 'heroku.com',
+                'netlify.com', 'vercel.com', 'pages.dev', 'workers.dev',
+
+                // Common system domains
+                'gravatar.com', 'wp.com', 'wordpress.org', 'wordpress.com',
+                'w3schools.com', 'mozilla.org', 'developer.mozilla.org',
+                'apple.com', 'microsoft.com', 'windows.com', 'office.com',
+                'adobe.com', 'creativecloud.adobe.com',
+                'paypal.com', 'stripe.com', 'razorpay.com',
+                'recaptcha.net', 'hcaptcha.com',
+
+                // Social media (handled separately)
+                'facebook.com', 'fb.com', 'fb.me',
+                'instagram.com', 'instagr.am', 'cdninstagram.com',
+                'twitter.com', 'x.com', 't.co', 'twimg.com',
+                'linkedin.com', 'licdn.com',
+                'youtube.com', 'youtu.be', 'ytimg.com', 'googlevideo.com',
+                'tiktok.com', 'tiktokcdn.com',
+                'whatsapp.com', 'wa.me', 'whatsapp.net',
+                'pinterest.com', 'pinimg.com',
+                'snapchat.com', 'snap.com',
+                'reddit.com', 'redd.it', 'redditstatic.com',
+                'telegram.org', 't.me',
+                'discord.gg', 'discord.com', 'discordapp.com',
+
+                // Short URLs / link services
+                'bit.ly', 'bitly.com', 'tinyurl.com', 'short.io',
+                'linktr.ee', 'linkin.bio', 'beacons.ai', 'lnk.bio',
+                'about.me', 'carrd.co',
+
+                // Misc
+                'jquery.com', 'react.js.org', 'vuejs.org', 'angular.io',
+                'sentry.io', 'bugsnag.com', 'rollbar.com',
+                'zendesk.com', 'intercom.io', 'drift.com', 'tawk.to',
+                'mailchimp.com', 'sendgrid.com', 'mailgun.com',
+                'trustpilot.com', 'yelp.com', 'tripadvisor.com'
+            ];
+
+            // Check against blacklist (exact or contains)
+            for (const blocked of DOMAIN_BLACKLIST) {
+                if (hostname === blocked || hostname.endsWith('.' + blocked)) {
+                    return; // Blocked
+                }
+            }
+
+            // Blacklisted domain patterns
+            const DOMAIN_PATTERNS = [
+                /^cdn\./i,                    // cdn.anything
+                /\.cdn\./i,                   // anything.cdn.anything
+                /^static\./i,                 // static.anything
+                /^assets\./i,                 // assets.anything
+                /^img[0-9]*\./i,              // img1.anything
+                /^images\./i,                 // images.anything
+                /^media\./i,                  // media.anything
+                /^api\./i,                    // api.anything
+                /^ads?\./i,                   // ad.anything, ads.anything
+                /^track(ing)?\./i,            // track.anything, tracking.anything
+                /^pixel\./i,                  // pixel.anything
+                /\.googleusercontent\./i,
+                /\.gstatic\./i,
+                /\.fbcdn\./i
+            ];
+
+            for (const pattern of DOMAIN_PATTERNS) {
+                if (pattern.test(hostname)) {
+                    return; // Blocked
+                }
+            }
 
             // Skip if same as current domain
             if (currentDomain && hostname === currentDomain) return;
 
-            // Skip if known social domain
+            // Skip if known social domain (from parent list)
             if (this.SOCIAL_DOMAINS.some(social => hostname.includes(social) || social.includes(hostname))) {
                 return;
             }
 
-            // Skip rejected paths
-            const pathname = parsed.pathname.toLowerCase();
-            if (this.REJECTED_PATHS.some(p => pathname.startsWith(p))) {
+            // Skip file extensions (not a webpage)
+            const FILE_EXTENSIONS = ['.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
+                '.woff', '.woff2', '.ttf', '.eot', '.pdf', '.zip', '.mp3', '.mp4'];
+            for (const ext of FILE_EXTENSIONS) {
+                if (pathname.endsWith(ext)) {
+                    return; // File, not a page
+                }
+            }
+
+            // Skip mailto/tel links
+            if (url.startsWith('mailto:') || url.startsWith('tel:') || url.startsWith('javascript:')) {
                 return;
             }
 
-            // Root domain only
-            const rootUrl = `https://${parsed.hostname}`;
-            const key = rootUrl.toLowerCase();
+            // ===== PATH BLACKLIST =====
+            const PATH_BLACKLIST = [
+                '/privacy', '/privacy-policy', '/terms', '/tos', '/legal', '/cookie',
+                '/login', '/signup', '/register', '/signin', '/auth',
+                '/wp-content', '/wp-includes', '/wp-admin', '/wp-json',
+                '/ads', '/ad', '/advert', '/sponsor',
+                '/sharer', '/share', '/intent',
+                '/api/', '/ajax/', '/cdn-cgi/',
+                '/.well-known/', '/feed/', '/rss',
+                '/cart', '/checkout', '/account', '/dashboard', '/admin'
+            ];
 
+            for (const blocked of PATH_BLACKLIST) {
+                if (pathname.includes(blocked)) {
+                    return; // Blocked path
+                }
+            }
+
+            // ===== QUALITY SCORING =====
+            let score = baseScore;
+
+            // +6: Root homepage (domain.com/)
+            const isRootHomepage = pathname === '/' || pathname === '';
+            if (isRootHomepage) {
+                score += 6;
+            }
+
+            // +5: Clean short path (likely homepage)
+            if (pathname.length <= 20 && !pathname.includes('?')) {
+                score += 3;
+            }
+
+            // -5: Long query strings (tracking junk)
+            const queryLength = parsed.search.length;
+            if (queryLength > 50) {
+                score -= 5;
+            } else if (queryLength > 20) {
+                score -= 2;
+            }
+
+            // -3: Very long pathname (probably not homepage)
+            if (pathname.length > 50) {
+                score -= 3;
+            }
+
+            // Skip if score too low (not quality enough)
+            if (score < 4) {
+                return;
+            }
+
+            // ===== NORMALIZE URL =====
+            // Get clean root domain URL
+            let cleanUrl;
+            if (isRootHomepage) {
+                cleanUrl = `https://${parsed.hostname}`;
+            } else {
+                // Remove tracking params
+                let cleanPathname = pathname;
+                // Remove trailing slash
+                if (cleanPathname.endsWith('/') && cleanPathname.length > 1) {
+                    cleanPathname = cleanPathname.slice(0, -1);
+                }
+                cleanUrl = `https://${parsed.hostname}${cleanPathname}`;
+            }
+
+            const key = parsed.hostname.toLowerCase(); // Dedupe by hostname only
+
+            // Add or update candidate
             if (!candidates.has(key)) {
                 candidates.set(key, {
                     platform: 'website',
-                    url: rootUrl,
+                    url: cleanUrl,
                     username: hostname,
-                    score: baseScore + 2
+                    score: score
                 });
             } else {
-                candidates.get(key).score += 1;
+                // If existing, only update if this has better score or is root homepage
+                const existing = candidates.get(key);
+                if (score > existing.score) {
+                    existing.score = score;
+                    existing.url = cleanUrl;
+                }
             }
         } catch (e) { }
     },
@@ -747,7 +966,7 @@ const SocialExtractor = {
                 seenUsernames[platform] = new Set();
             }
 
-            // Dedupe by username
+            // Dedupe by username/hostname
             const usernameKey = link.username?.toLowerCase() || link.url;
             if (seenUsernames[platform].has(usernameKey)) {
                 continue;
@@ -768,6 +987,11 @@ const SocialExtractor = {
                 }
                 return b.score - a.score;
             });
+
+            // Limit website results to max 5 high-quality ones
+            if (platform === 'website') {
+                grouped[platform] = grouped[platform].slice(0, 5);
+            }
         }
 
         return grouped;

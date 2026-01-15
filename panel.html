@@ -106,13 +106,6 @@
                 <div class="control-section">
                     <h3 class="section-label">Processing</h3>
                     <label class="toggle-control">
-                        <span class="toggle-text">Validate Emails</span>
-                        <div class="toggle-switch small">
-                            <input type="checkbox" id="validateToggle" checked>
-                            <span class="toggle-slider"></span>
-                        </div>
-                    </label>
-                    <label class="toggle-control">
                         <span class="toggle-text">Generate Names</span>
                         <div class="toggle-switch small">
                             <input type="checkbox" id="namesToggle">
@@ -257,6 +250,26 @@
                     Saved Leads
                     <span class="tab-count" id="savedCount">0</span>
                 </button>
+                <div class="tab-export-buttons">
+                    <button class="btn-export-dashboard" id="exportLiveCSV" title="Export Live Results CSV">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                            <path d="M12 3V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        Export Live
+                    </button>
+                    <button class="btn-export-dashboard" id="exportSavedCSV" title="Export Saved Leads CSV">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                            <path d="M12 3V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        Export Saved
+                    </button>
+                </div>
             </div>
 
             <!-- Live Results Tab -->

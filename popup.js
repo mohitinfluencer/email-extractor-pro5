@@ -105,7 +105,6 @@ function cacheElements() {
     elements.emailsToggle = document.getElementById('emailsToggle');
     elements.phonesToggle = document.getElementById('phonesToggle');
     elements.socialsToggle = document.getElementById('socialsToggle');
-    elements.validateToggle = document.getElementById('validateToggle');
     elements.namesToggle = document.getElementById('namesToggle');
     elements.autosaveToggle = document.getElementById('autosaveToggle');
     elements.serpToggle = document.getElementById('serpToggle');
@@ -113,6 +112,7 @@ function cacheElements() {
     elements.loadingState = document.getElementById('loadingState');
     elements.inactiveState = document.getElementById('inactiveState');
     elements.resultsContainer = document.getElementById('resultsContainer');
+    elements.exportAllLeads = document.getElementById('exportAllLeads');
 
     elements.emailsSection = document.getElementById('emailsSection');
     elements.emailsCount = document.getElementById('emailsCount');
@@ -121,6 +121,7 @@ function cacheElements() {
     elements.emailsTotal = document.getElementById('emailsTotal');
     elements.copyEmails = document.getElementById('copyEmails');
     elements.clearEmails = document.getElementById('clearEmails');
+    elements.exportEmails = document.getElementById('exportEmails');
 
     elements.invalidEmailsDropdown = document.getElementById('invalidEmailsDropdown');
     elements.invalidEmailsToggle = document.getElementById('invalidEmailsToggle');
@@ -136,6 +137,7 @@ function cacheElements() {
     elements.phonesTotal = document.getElementById('phonesTotal');
     elements.copyPhones = document.getElementById('copyPhones');
     elements.clearPhones = document.getElementById('clearPhones');
+    elements.exportPhones = document.getElementById('exportPhones');
     elements.noCountryMessage = document.getElementById('noCountryMessage');
 
     elements.countryDropdownBtn = document.getElementById('countryDropdownBtn');
@@ -155,6 +157,9 @@ function cacheElements() {
     elements.copyLI = document.getElementById('copyLI');
     elements.copySocials = document.getElementById('copySocials');
     elements.clearSocials = document.getElementById('clearSocials');
+    elements.exportSocials = document.getElementById('exportSocials');
+
+    elements.exportSavedLeads = document.getElementById('exportSavedLeads');
 
     elements.serpSubsection = document.getElementById('serpSubsection');
     elements.serpCount = document.getElementById('serpCount');
@@ -240,7 +245,7 @@ async function saveSettings() {
             extractEmails: state.extractEmails,
             extractPhones: state.extractPhones,
             extractSocials: state.extractSocials,
-            validateEmails: state.validateEmails,
+            validateEmails: true, // Always validate
             generateNames: state.generateNames,
             autosave: state.autosave,
             extractSerp: state.extractSerp,
@@ -258,7 +263,6 @@ function updateUI() {
     elements.emailsToggle.checked = state.extractEmails;
     elements.phonesToggle.checked = state.extractPhones;
     elements.socialsToggle.checked = state.extractSocials;
-    elements.validateToggle.checked = state.validateEmails;
     elements.namesToggle.checked = state.generateNames;
     elements.autosaveToggle.checked = state.autosave;
     elements.serpToggle.checked = state.extractSerp;
@@ -327,7 +331,6 @@ function setupEventListeners() {
         { el: 'emailsToggle', key: 'extractEmails' },
         { el: 'phonesToggle', key: 'extractPhones' },
         { el: 'socialsToggle', key: 'extractSocials' },
-        { el: 'validateToggle', key: 'validateEmails' },
         { el: 'namesToggle', key: 'generateNames' },
         { el: 'serpToggle', key: 'extractSerp' }
     ];
@@ -368,6 +371,61 @@ function setupEventListeners() {
     elements.clearEmails.addEventListener('click', () => { state.emails = []; state.invalidEmails = []; renderEmails(); });
     elements.clearPhones.addEventListener('click', () => { state.phones = []; renderPhones(); });
     elements.clearSocials.addEventListener('click', () => { state.socialLinks = []; state.socialsByPlatform = {}; renderSocials(); });
+
+    // Export CSV buttons
+    elements.exportEmails?.addEventListener('click', () => {
+        if (state.emails.length === 0) {
+            showToast('No emails to export', 'error');
+            return;
+        }
+        const meta = { sourceUrl: state.sourceUrl || '', pageTitle: state.pageTitle || '', extractedAt: CSVExporter.getTimestamp() };
+        const success = CSVExporter.downloadEmails(state.emails, meta, state.generateNames);
+        if (success) showToast('Emails CSV downloaded!', 'success');
+    });
+
+    elements.exportPhones?.addEventListener('click', () => {
+        if (state.phones.length === 0) {
+            showToast('No phones to export', 'error');
+            return;
+        }
+        const meta = { sourceUrl: state.sourceUrl || '', pageTitle: state.pageTitle || '', extractedAt: CSVExporter.getTimestamp() };
+        const success = CSVExporter.downloadPhones(state.phones, meta);
+        if (success) showToast('Phones CSV downloaded!', 'success');
+    });
+
+    elements.exportSocials?.addEventListener('click', () => {
+        if (state.socialLinks.length === 0) {
+            showToast('No social links to export', 'error');
+            return;
+        }
+        const meta = { sourceUrl: state.sourceUrl || '', pageTitle: state.pageTitle || '', extractedAt: CSVExporter.getTimestamp() };
+        const success = CSVExporter.downloadSocialLinks(state.socialLinks, meta);
+        if (success) showToast('Social Links CSV downloaded!', 'success');
+    });
+
+    elements.exportSavedLeads?.addEventListener('click', async () => {
+        const data = await Storage.getSaved();
+        const hasData = (data.emails?.length || 0) + (data.phones?.length || 0) + (data.socialLinks?.length || 0) > 0;
+        if (!hasData) {
+            showToast('No saved leads to export', 'error');
+            return;
+        }
+        const success = CSVExporter.downloadSavedLeads(data, state.generateNames);
+        if (success) showToast('Saved Leads CSV downloaded!', 'success');
+    });
+
+    // Export All Leads (current page)
+    elements.exportAllLeads?.addEventListener('click', () => {
+        const hasData = state.emails.length + state.phones.length + state.socialLinks.length > 0;
+        if (!hasData) {
+            showToast('No leads to export', 'error');
+            return;
+        }
+        const meta = { sourceUrl: state.sourceUrl || '', pageTitle: state.pageTitle || '', extractedAt: CSVExporter.getTimestamp() };
+        const data = { emails: state.emails, phones: state.phones, socialLinks: state.socialLinks };
+        const success = CSVExporter.downloadAllLeads(data, meta, state.generateNames);
+        if (success) showToast('All Leads CSV downloaded!', 'success');
+    });
 
     // See all buttons
     elements.seeAllEmails.addEventListener('click', () => openModal('emails'));
@@ -485,7 +543,7 @@ async function triggerExtraction() {
                 extractPhones: state.extractPhones,
                 extractSocials: state.extractSocials,
                 extractSerpLinks: state.extractSerp,
-                validateEmails: state.validateEmails,
+                validateEmails: true, // Always validate
                 generateNames: state.generateNames,
                 selectedCountries: state.selectedCountries
             }, 4000);
@@ -509,7 +567,7 @@ async function triggerExtraction() {
                     extractPhones: state.extractPhones,
                     extractSocials: state.extractSocials,
                     extractSerpLinks: state.extractSerp,
-                    validateEmails: state.validateEmails,
+                    validateEmails: true, // Always validate
                     generateNames: state.generateNames,
                     selectedCountries: state.selectedCountries
                 }, 4000);
@@ -532,6 +590,10 @@ async function triggerExtraction() {
             state.socialLinks = response.socialLinks || [];
             state.socialsByPlatform = response.socialsByPlatform || {};
             state.serpLinks = response.serpLinks || { linkedin: [] };
+
+            // Store metadata for CSV export
+            state.sourceUrl = tab.url || '';
+            state.pageTitle = tab.title || '';
 
             // Save results
             await Storage.saveResults({

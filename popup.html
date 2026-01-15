@@ -69,11 +69,6 @@
         <span class="mini-toggle-label">Socials</span>
       </label>
       <label class="mini-toggle extractor-toggle">
-        <input type="checkbox" id="validateToggle" checked>
-        <span class="mini-toggle-track"></span>
-        <span class="mini-toggle-label">Validate</span>
-      </label>
-      <label class="mini-toggle extractor-toggle">
         <input type="checkbox" id="namesToggle">
         <span class="mini-toggle-track"></span>
         <span class="mini-toggle-label">Names</span>
@@ -122,6 +117,15 @@
         <span class="saved-stat-divider">|</span>
         <span class="saved-stat"><strong id="savedSocialCount">0</strong> socials</span>
       </div>
+      <button class="btn-export-small" id="exportSavedLeads" title="Export Saved Leads">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+          <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" />
+          <path d="M12 3V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" />
+        </svg>
+        CSV
+      </button>
     </div>
 
     <!-- Main Content -->
@@ -243,6 +247,20 @@
       <!-- Results Container (hidden when Profile Mode ON) -->
       <div class="results-container" id="resultsContainer" style="display: none;">
 
+        <!-- Export All Bar -->
+        <div class="export-all-bar">
+          <button class="btn-export-all" id="exportAllLeads">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" />
+              <path d="M12 3V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" />
+            </svg>
+            Export All Leads CSV
+          </button>
+        </div>
+
+
         <!-- Emails Section -->
         <section class="section" id="emailsSection">
           <div class="section-header">
@@ -255,6 +273,14 @@
               <span class="count" id="emailsCount">(0)</span>
             </div>
             <div class="section-actions">
+              <button class="btn-icon" id="exportEmails" title="Export CSV">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" />
+                  <path d="M12 3V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
               <button class="btn-icon" id="copyEmails" title="Copy all">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" />
@@ -308,6 +334,14 @@
               <span class="filtered-count" id="phonesFiltered"></span>
             </div>
             <div class="section-actions">
+              <button class="btn-icon" id="exportPhones" title="Export CSV">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" />
+                  <path d="M12 3V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
               <button class="btn-icon" id="copyPhones" title="Copy all">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" />
@@ -371,6 +405,14 @@
             <div class="section-actions">
               <button class="btn-small" id="copyWA" title="Copy WhatsApp">WA</button>
               <button class="btn-small" id="copyLI" title="Copy LinkedIn">LI</button>
+              <button class="btn-icon" id="exportSocials" title="Export CSV">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" />
+                  <path d="M12 3V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
               <button class="btn-icon" id="copySocials" title="Copy all">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" />

@@ -289,7 +289,7 @@ body {
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-lg);
     z-index: 200;
-    max-height: 250px;
+    max-height: 340px;
     overflow: hidden;
 }
 
@@ -301,6 +301,11 @@ body {
 .country-search {
     padding: 8px;
     border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+    z-index: 1;
 }
 
 .country-search input {
@@ -321,8 +326,29 @@ body {
 .country-list {
     flex: 1;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-tertiary) transparent;
     padding: 6px;
-    max-height: 150px;
+    max-height: 260px;
+    scroll-behavior: smooth;
+}
+
+.country-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.country-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.country-list::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+}
+
+.country-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
 }
 
 .country-item {
@@ -485,6 +511,32 @@ body {
 
 .tab-btn:not(.active) .tab-count {
     background: var(--bg-tertiary);
+}
+
+.tab-export-buttons {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.btn-export-dashboard {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.btn-export-dashboard:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
 }
 
 .tab-content {

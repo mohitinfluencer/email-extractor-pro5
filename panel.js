@@ -59,7 +59,6 @@ function cacheElements() {
     el.phonesToggle = document.getElementById('phonesToggle');
     el.socialsToggle = document.getElementById('socialsToggle');
     el.serpToggle = document.getElementById('serpToggle');
-    el.validateToggle = document.getElementById('validateToggle');
     el.namesToggle = document.getElementById('namesToggle');
     el.autosaveToggle = document.getElementById('autosaveToggle');
 
@@ -154,7 +153,6 @@ function updateUI() {
     el.phonesToggle.checked = state.settings.extractPhones;
     el.socialsToggle.checked = state.settings.extractSocials;
     el.serpToggle.checked = state.settings.extractSerp;
-    el.validateToggle.checked = state.settings.validateEmails;
     el.namesToggle.checked = state.settings.generateNames;
     el.autosaveToggle.checked = state.settings.autosave;
 
@@ -219,7 +217,6 @@ function setupEventListeners() {
         { el: el.phonesToggle, key: 'extractPhones' },
         { el: el.socialsToggle, key: 'extractSocials' },
         { el: el.serpToggle, key: 'extractSerp' },
-        { el: el.validateToggle, key: 'validateEmails' },
         { el: el.namesToggle, key: 'generateNames' },
         { el: el.autosaveToggle, key: 'autosave' }
     ];
@@ -251,6 +248,35 @@ function setupEventListeners() {
     // Actions
     el.saveNowBtn.addEventListener('click', saveAllNow);
     el.refreshBtn.addEventListener('click', refreshData);
+
+    // Export CSV buttons
+    const exportLiveBtn = document.getElementById('exportLiveCSV');
+    const exportSavedBtn = document.getElementById('exportSavedCSV');
+
+    exportLiveBtn?.addEventListener('click', () => {
+        const hasData = (state.results.emails?.length || 0) + (state.results.phones?.length || 0) + (state.results.socialLinks?.length || 0) > 0;
+        if (!hasData) {
+            showToast('No live results to export', 'error');
+            return;
+        }
+        const data = {
+            emails: state.results.emails || [],
+            phones: state.results.phones || [],
+            socialLinks: state.results.socialLinks || []
+        };
+        const success = CSVExporter.downloadAllLeads(data, {}, state.settings.generateNames);
+        if (success) showToast('Live Results CSV downloaded!', 'success');
+    });
+
+    exportSavedBtn?.addEventListener('click', () => {
+        const hasData = (state.saved.emails?.length || 0) + (state.saved.phones?.length || 0) + (state.saved.socialLinks?.length || 0) > 0;
+        if (!hasData) {
+            showToast('No saved leads to export', 'error');
+            return;
+        }
+        const success = CSVExporter.downloadSavedLeads(state.saved, state.settings.generateNames);
+        if (success) showToast('Saved Leads CSV downloaded!', 'success');
+    });
 
     // Live copy/clear
     document.getElementById('copyLiveEmails').addEventListener('click', () =>
