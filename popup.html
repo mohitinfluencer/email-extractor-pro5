@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Extractor Pro</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="24" height="24" rx="6" fill="url(#gradient1)" />
+            <path d="M6 8L12 13L18 8" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M6 8H18V16C18 16.5523 17.5523 17 17 17H7C6.44772 17 6 16.5523 6 16V8Z" stroke="white"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <defs>
+              <linearGradient id="gradient1" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#6366F1" />
+                <stop offset="1" stop-color="#8B5CF6" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <h1 class="title">Email Extractor Pro</h1>
+      </div>
+      <div class="header-right">
+        <button class="btn-icon expand-btn" id="expandBtn" title="Open Dashboard">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <label class="toggle-switch active-toggle">
+          <input type="checkbox" id="activeToggle" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">Active</span>
+        </label>
+      </div>
+    </header>
+
+    <!-- Toggles Row -->
+    <div class="toggles-row" id="extractorToggles">
+      <label class="mini-toggle profile-mode-toggle">
+        <input type="checkbox" id="profileModeToggle">
+        <span class="mini-toggle-track profile-track"></span>
+        <span class="mini-toggle-label">Profile Mode</span>
+      </label>
+      <div class="toggle-divider"></div>
+      <label class="mini-toggle extractor-toggle">
+        <input type="checkbox" id="emailsToggle" checked>
+        <span class="mini-toggle-track"></span>
+        <span class="mini-toggle-label">Emails</span>
+      </label>
+      <label class="mini-toggle extractor-toggle">
+        <input type="checkbox" id="phonesToggle" checked>
+        <span class="mini-toggle-track"></span>
+        <span class="mini-toggle-label">Phones</span>
+      </label>
+      <label class="mini-toggle extractor-toggle">
+        <input type="checkbox" id="socialsToggle" checked>
+        <span class="mini-toggle-track"></span>
+        <span class="mini-toggle-label">Socials</span>
+      </label>
+      <label class="mini-toggle extractor-toggle">
+        <input type="checkbox" id="validateToggle" checked>
+        <span class="mini-toggle-track"></span>
+        <span class="mini-toggle-label">Validate</span>
+      </label>
+      <label class="mini-toggle extractor-toggle">
+        <input type="checkbox" id="namesToggle">
+        <span class="mini-toggle-track"></span>
+        <span class="mini-toggle-label">Names</span>
+      </label>
+      <label class="mini-toggle extractor-toggle">
+        <input type="checkbox" id="autosaveToggle">
+        <span class="mini-toggle-track"></span>
+        <span class="mini-toggle-label">Autosave</span>
+      </label>
+      <label class="mini-toggle extractor-toggle">
+        <input type="checkbox" id="serpToggle">
+        <span class="mini-toggle-track"></span>
+        <span class="mini-toggle-label">SERP</span>
+      </label>
+    </div>
+
+    <!-- Profile Mode Toggles (hidden when Profile Mode OFF) -->
+    <div class="toggles-row profile-toggles" id="profileToggles" style="display: none;">
+      <label class="mini-toggle profile-mode-toggle active">
+        <input type="checkbox" id="profileModeToggle2" checked>
+        <span class="mini-toggle-track profile-track"></span>
+        <span class="mini-toggle-label">Profile Mode</span>
+      </label>
+      <div class="toggle-divider"></div>
+      <label class="mini-toggle">
+        <input type="checkbox" id="profileAutosaveToggle">
+        <span class="mini-toggle-track"></span>
+        <span class="mini-toggle-label">Autosave Profiles</span>
+      </label>
+    </div>
+
+    <!-- Saved Leads Counter (shown when autosave ON) -->
+    <div class="saved-counter-bar" id="savedCounterBar" style="display: none;">
+      <div class="saved-counter-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor"
+            stroke-width="2" />
+          <polyline points="17,21 17,13 7,13 7,21" stroke="currentColor" stroke-width="2" />
+        </svg>
+        <span>Saved:</span>
+      </div>
+      <div class="saved-counter-stats">
+        <span class="saved-stat"><strong id="savedEmailCount">0</strong> emails</span>
+        <span class="saved-stat-divider">|</span>
+        <span class="saved-stat"><strong id="savedPhoneCount">0</strong> phones</span>
+        <span class="saved-stat-divider">|</span>
+        <span class="saved-stat"><strong id="savedSocialCount">0</strong> socials</span>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content" id="mainContent">
+      <!-- Loading State -->
+      <div class="loading-state" id="loadingState">
+        <div class="spinner"></div>
+        <p>Extracting data...</p>
+      </div>
+
+      <!-- Inactive State -->
+      <div class="inactive-state" id="inactiveState" style="display: none;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" stroke="#6B7280" stroke-width="2" />
+          <path d="M15 9L9 15M9 9L15 15" stroke="#6B7280" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <p>Extension inactive</p>
+        <span>Turn on Active toggle to extract data</span>
+      </div>
+
+      <!-- Profile Mode Container (hidden when Profile Mode OFF) -->
+      <div class="profile-container" id="profileContainer" style="display: none;">
+
+        <!-- Not a Profile Page Message -->
+        <div class="not-profile-state" id="notProfileState" style="display: none;">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="8" r="4" stroke="#6366F1" stroke-width="2" />
+            <path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke="#6366F1" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          <p>No profile detected</p>
+          <span>Open a LinkedIn or Instagram profile to extract</span>
+        </div>
+
+        <!-- Profile Card -->
+        <div class="profile-card" id="profileCard" style="display: none;">
+          <div class="profile-header">
+            <div class="profile-badge" id="profileBadge">LinkedIn</div>
+            <div class="profile-actions">
+              <button class="btn-icon" id="copyProfileBtn" title="Copy Summary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" />
+                  <path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor"
+                    stroke-width="2" />
+                </svg>
+              </button>
+              <button class="btn-primary-sm" id="saveProfileBtn">Save Profile</button>
+            </div>
+          </div>
+          <div class="profile-info">
+            <h3 class="profile-name" id="profileName">-</h3>
+            <p class="profile-username" id="profileUsername">@username</p>
+            <p class="profile-headline" id="profileHeadline">-</p>
+            <div class="profile-meta">
+              <span class="profile-location" id="profileLocation"></span>
+              <span class="profile-company" id="profileCompany"></span>
+            </div>
+            <div class="profile-contacts">
+              <div class="profile-contact" id="profileEmailRow" style="display: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="2" />
+                  <path d="M2 7l10 7 10-7" stroke="currentColor" stroke-width="2" />
+                </svg>
+                <span id="profileEmail">-</span>
+              </div>
+              <div class="profile-contact" id="profilePhoneRow" style="display: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M22 16.92v3a2 2 0 01-2.18 2A19.79 19.79 0 013 4.18 2 2 0 015 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"
+                    stroke="currentColor" stroke-width="2" />
+                </svg>
+                <span id="profilePhone">-</span>
+              </div>
+              <div class="profile-contact" id="profileWebsiteRow" style="display: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
+                  <path d="M2 12h20M12 2c2.5 2.7 4 6 4 10s-1.5 7.3-4 10c-2.5-2.7-4-6-4-10s1.5-7.3 4-10z"
+                    stroke="currentColor" stroke-width="2" />
+                </svg>
+                <a id="profileWebsite" href="#" target="_blank">-</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Saved Profiles Section -->
+        <section class="section saved-profiles-section" id="savedProfilesSection">
+          <div class="section-header">
+            <div class="section-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" />
+                <path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+              <span>SAVED PROFILES</span>
+              <span class="count" id="savedProfilesCount">(0)</span>
+            </div>
+            <div class="section-actions">
+              <button class="btn-icon" id="downloadProfilesCsv" title="Download CSV">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </button>
+              <button class="btn-icon" id="clearSavedProfiles" title="Clear All">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="section-content">
+            <div class="items-list" id="savedProfilesList"></div>
+            <button class="see-all-btn" id="seeAllProfiles" style="display: none;">See all (<span
+                id="profilesTotal">0</span>)</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- Results Container (hidden when Profile Mode ON) -->
+      <div class="results-container" id="resultsContainer" style="display: none;">
+
+        <!-- Emails Section -->
+        <section class="section" id="emailsSection">
+          <div class="section-header">
+            <div class="section-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="2" />
+                <path d="M2 7L12 14L22 7" stroke="currentColor" stroke-width="2" />
+              </svg>
+              <span>EMAILS</span>
+              <span class="count" id="emailsCount">(0)</span>
+            </div>
+            <div class="section-actions">
+              <button class="btn-icon" id="copyEmails" title="Copy all">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" />
+                  <path d="M16 8V6C16 4.89543 15.1046 4 14 4H6C4.89543 4 4 4.89543 4 6V14C4 15.1046 4.89543 16 6 16H8"
+                    stroke="currentColor" stroke-width="2" />
+                </svg>
+              </button>
+              <button class="btn-icon" id="clearEmails" title="Clear">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M3 6H21M5 6V20C5 21.1046 5.89543 22 7 22H17C18.1046 22 19 21.1046 19 20V6M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="section-content">
+            <div class="items-list" id="emailsList"></div>
+            <button class="see-all-btn" id="seeAllEmails" style="display: none;">See all (<span
+                id="emailsTotal">0</span>)</button>
+          </div>
+          <!-- Invalid Emails Dropdown -->
+          <div class="invalid-dropdown" id="invalidEmailsDropdown" style="display: none;">
+            <button class="invalid-toggle" id="invalidEmailsToggle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round" />
+              </svg>
+              <span>Invalid Emails (<span id="invalidCount">0</span>)</span>
+            </button>
+            <div class="invalid-content" id="invalidEmailsContent" style="display: none;">
+              <div class="items-list" id="invalidEmailsList"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Phones Section -->
+        <section class="section" id="phonesSection">
+          <div class="section-header">
+            <div class="section-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M22 16.92V19.92C22 20.4704 21.5704 20.92 21.02 20.92C20.4696 20.92 20.02 20.4704 20.02 19.92V16.92C20.02 16.3696 20.4696 15.92 21.02 15.92C21.5704 15.92 22 16.3696 22 16.92Z"
+                  stroke="currentColor" stroke-width="2" />
+                <path
+                  d="M5 4H9L11 9L8.5 10.5C9.57096 12.6715 11.3285 14.429 13.5 15.5L15 13L20 15V19C20 20.1046 19.1046 21 18 21C9.71573 21 3 14.2843 3 6C3 4.89543 3.89543 4 5 4"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span>PHONES</span>
+              <span class="count" id="phonesCount">(0)</span>
+              <span class="filtered-count" id="phonesFiltered"></span>
+            </div>
+            <div class="section-actions">
+              <button class="btn-icon" id="copyPhones" title="Copy all">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" />
+                  <path d="M16 8V6C16 4.89543 15.1046 4 14 4H6C4.89543 4 4 4.89543 4 6V14C4 15.1046 4.89543 16 6 16H8"
+                    stroke="currentColor" stroke-width="2" />
+                </svg>
+              </button>
+              <button class="btn-icon" id="clearPhones" title="Clear">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M3 6H21M5 6V20C5 21.1046 5.89543 22 7 22H17C18.1046 22 19 21.1046 19 20V6M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- Country Selector -->
+          <div class="country-selector">
+            <button class="country-dropdown-btn" id="countryDropdownBtn">
+              <span id="countryLabel">Select countries</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round" />
+              </svg>
+            </button>
+            <div class="country-dropdown" id="countryDropdown" style="display: none;">
+              <div class="country-search">
+                <input type="text" id="countrySearch" placeholder="Search countries...">
+              </div>
+              <div class="country-list" id="countryList"></div>
+              <div class="country-actions">
+                <button class="btn-text" id="selectAllCountries">Select All</button>
+                <button class="btn-text" id="clearCountries">Clear</button>
+              </div>
+            </div>
+          </div>
+          <div class="section-content">
+            <div class="no-country-message" id="noCountryMessage" style="display: none;">
+              <span>Select at least one country</span>
+            </div>
+            <div class="items-list" id="phonesList"></div>
+            <button class="see-all-btn" id="seeAllPhones" style="display: none;">See all (<span
+                id="phonesTotal">0</span>)</button>
+          </div>
+        </section>
+
+        <!-- Social Links Section -->
+        <section class="section" id="socialsSection">
+          <div class="section-header">
+            <div class="section-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
+                <path d="M2 12H22" stroke="currentColor" stroke-width="2" />
+                <path
+                  d="M12 2C14.5013 4.73835 15.9228 8.29203 16 12C15.9228 15.708 14.5013 19.2616 12 22C9.49872 19.2616 8.07725 15.708 8 12C8.07725 8.29203 9.49872 4.73835 12 2Z"
+                  stroke="currentColor" stroke-width="2" />
+              </svg>
+              <span>SOCIAL LINKS</span>
+              <span class="count" id="socialsCount">(0)</span>
+            </div>
+            <div class="section-actions">
+              <button class="btn-small" id="copyWA" title="Copy WhatsApp">WA</button>
+              <button class="btn-small" id="copyLI" title="Copy LinkedIn">LI</button>
+              <button class="btn-icon" id="copySocials" title="Copy all">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" />
+                  <path d="M16 8V6C16 4.89543 15.1046 4 14 4H6C4.89543 4 4 4.89543 4 6V14C4 15.1046 4.89543 16 6 16H8"
+                    stroke="currentColor" stroke-width="2" />
+                </svg>
+              </button>
+              <button class="btn-icon" id="clearSocials" title="Clear">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M3 6H21M5 6V20C5 21.1046 5.89543 22 7 22H17C18.1046 22 19 21.1046 19 20V6M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="section-content">
+            <div class="platform-list" id="socialsList"></div>
+            <button class="see-all-btn" id="seeAllSocials" style="display: none;">See all (<span
+                id="socialsTotal">0</span>)</button>
+          </div>
+          <!-- SERP LinkedIn Links Subsection -->
+          <div class="serp-subsection" id="serpSubsection" style="display: none;">
+            <div class="serp-header">
+              <span class="serp-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2" />
+                  <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+                LinkedIn SERP Links (<span id="serpCount">0</span>)
+              </span>
+              <button class="btn-icon" id="copySerpLinks" title="Copy all">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" />
+                  <path d="M16 8V6C16 4.89543 15.1046 4 14 4H6C4.89543 4 4 4.89543 4 6V14C4 15.1046 4.89543 16 6 16H8"
+                    stroke="currentColor" stroke-width="2" />
+                </svg>
+              </button>
+            </div>
+            <div class="items-list serp-list" id="serpList"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="modalOverlay" style="display: none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title" id="modalTitle">All Items</h2>
+          <button class="modal-close" id="modalClose">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-search">
+          <input type="text" id="modalSearch" placeholder="Search...">
+        </div>
+        <div class="modal-content" id="modalContent"></div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="modalClear">Clear All</button>
+          <button class="btn-primary" id="modalCopy">Copy All</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="utils/countryList.js"></script>
+  <script src="utils/storage.js"></script>
+  <script src="utils/emailExtractor.js"></script>
+  <script src="utils/phoneExtractor.js"></script>
+  <script src="utils/socialExtractor.js"></script>
+  <script src="utils/nameGenerator.js"></script>
+  <script src="utils/csvExporter.js"></script>
+  <script src="popup.js"></script>
+</body>
+
+</html>
