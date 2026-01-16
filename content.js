@@ -466,7 +466,8 @@
                 patterns: [/instagram\.com\/([a-zA-Z0-9_.]+)/i],
                 rejectPatterns: [/\/p\//, /\/reel\//, /\/reels\//, /\/stories\//, /\/explore\//, /\/direct\//, /\/accounts\//, /\/tv\//, /\?__a=/],
                 canonicalize: (url) => {
-                    if (this.PLATFORMS.instagram.rejectPatterns.some(p => p.test(url))) return null;
+                    // Inline reject check (don't use 'this')
+                    if (/\/p\/|\/reel\/|\/reels\/|\/stories\/|\/explore\/|\/direct\/|\/accounts\/|\/tv\/|\?__a=/.test(url)) return null;
                     const match = url.match(/instagram\.com\/([a-zA-Z0-9_.]+)/i);
                     if (match && match[1]) {
                         const username = match[1].toLowerCase();
@@ -482,7 +483,8 @@
                 patterns: [/linkedin\.com\/in\/([^/?#]+)/i, /linkedin\.com\/company\/([^/?#]+)/i],
                 rejectPatterns: [/\/feed/, /\/jobs/, /\/posts\//, /\/pulse\//, /\/groups\//, /\/learning/, /\/messaging/],
                 canonicalize: (url) => {
-                    if (this.PLATFORMS.linkedin.rejectPatterns.some(p => p.test(url))) return null;
+                    // Inline reject check
+                    if (/\/feed|\/jobs|\/posts\/|\/pulse\/|\/groups\/|\/learning|\/messaging/.test(url)) return null;
                     let match = url.match(/linkedin\.com\/in\/([a-zA-Z0-9_-]+)/i);
                     if (match) return `https://www.linkedin.com/in/${match[1].toLowerCase()}`;
                     match = url.match(/linkedin\.com\/company\/([a-zA-Z0-9_-]+)/i);
@@ -495,7 +497,8 @@
                 patterns: [/tiktok\.com\/@([a-zA-Z0-9_.]+)/i],
                 rejectPatterns: [/\/video\//, /\/t\//, /\/music\//, /\/tag\//],
                 canonicalize: (url) => {
-                    if (this.PLATFORMS.tiktok.rejectPatterns.some(p => p.test(url))) return null;
+                    // Inline reject check
+                    if (/\/video\/|\/t\/|\/music\/|\/tag\//.test(url)) return null;
                     const match = url.match(/tiktok\.com\/@([a-zA-Z0-9_.]+)/i);
                     return match ? `https://www.tiktok.com/@${match[1].toLowerCase()}` : null;
                 }
@@ -505,7 +508,8 @@
                 patterns: [/youtube\.com\/@([^/?#]+)/i, /youtube\.com\/channel\/([^/?#]+)/i, /youtube\.com\/c\/([^/?#]+)/i, /youtube\.com\/user\/([^/?#]+)/i],
                 rejectPatterns: [/\/watch/, /\/shorts\//, /\/playlist/, /\/results/, /\/embed/, /\/live/],
                 canonicalize: (url) => {
-                    if (this.PLATFORMS.youtube.rejectPatterns.some(p => p.test(url))) return null;
+                    // Inline reject check
+                    if (/\/watch|\/shorts\/|\/playlist|\/results|\/embed|\/live/.test(url)) return null;
                     let match = url.match(/youtube\.com\/@([^/?#]+)/i);
                     if (match) return `https://www.youtube.com/@${match[1]}`;
                     match = url.match(/youtube\.com\/channel\/([^/?#]+)/i);
@@ -522,7 +526,8 @@
                 patterns: [/(?:twitter|x)\.com\/([a-zA-Z0-9_]+)/i],
                 rejectPatterns: [/\/status\//, /\/share/, /\/intent\//, /\/home/, /\/explore/, /\/search/, /\/i\//],
                 canonicalize: (url) => {
-                    if (this.PLATFORMS.twitter.rejectPatterns.some(p => p.test(url))) return null;
+                    // Inline reject check
+                    if (/\/status\/|\/share|\/intent\/|\/home|\/explore|\/search|\/i\//.test(url)) return null;
                     const match = url.match(/(?:twitter|x)\.com\/([a-zA-Z0-9_]+)/i);
                     if (match && match[1]) {
                         const username = match[1].toLowerCase();
@@ -538,7 +543,8 @@
                 patterns: [/(?:facebook|fb)\.com\/([a-zA-Z0-9.]+)/i, /facebook\.com\/profile\.php\?id=(\d+)/i],
                 rejectPatterns: [/\/sharer/, /\/share/, /\/watch/, /\/reel/, /\/photo/, /\/posts\//, /\/events\//, /\/groups\//, /\/marketplace/, /\/dialog\//],
                 canonicalize: (url) => {
-                    if (this.PLATFORMS.facebook.rejectPatterns.some(p => p.test(url))) return null;
+                    // Inline reject check
+                    if (/\/sharer|\/share|\/watch|\/reel|\/photo|\/posts\/|\/events\/|\/groups\/|\/marketplace|\/dialog\//.test(url)) return null;
                     let match = url.match(/facebook\.com\/profile\.php\?id=(\d+)/i);
                     if (match) return `https://www.facebook.com/profile.php?id=${match[1]}`;
                     match = url.match(/(?:facebook|fb)\.com\/([a-zA-Z0-9.]+)/i);
@@ -632,12 +638,57 @@
             return result;
         },
 
+        // Check if we're on Google SERP
+        isGoogleSerp() {
+            return window.location?.hostname?.includes('google.') || false;
+        },
+
+        // Extract real URL from Google redirect
+        extractGoogleRedirectUrl(href) {
+            try {
+                let url;
+                if (href.startsWith('/url?')) {
+                    url = new URL(href, 'https://www.google.com');
+                } else {
+                    url = new URL(href);
+                }
+                const realUrl = url.searchParams.get('q') || url.searchParams.get('url');
+                if (realUrl && realUrl.startsWith('http')) {
+                    return decodeURIComponent(realUrl);
+                }
+            } catch (e) { }
+            return null;
+        },
+
+        // Check if URL is internal Google link
+        isGoogleInternalLink(href) {
+            const skip = ['/search?', '/preferences', '/imgres?', 'accounts.google.com',
+                'policies.google.com', 'support.google.com', 'ssl.gstatic.com', 'gstatic.com',
+                'googleadservices.com', '/webhp', '/advanced_search'];
+            return skip.some(p => href.toLowerCase().includes(p));
+        },
+
         extractFromAnchors(doc, candidates, currentDomain) {
+            const isSerp = this.isGoogleSerp();
+
             doc.querySelectorAll('a[href]').forEach(anchor => {
-                const href = anchor.getAttribute('href');
+                let href = anchor.getAttribute('href');
                 if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
 
                 try {
+                    // SERP: Extract real URL from Google redirects
+                    if (isSerp && (href.startsWith('/url?') || href.includes('google.com/url?'))) {
+                        const realUrl = this.extractGoogleRedirectUrl(href);
+                        if (realUrl) {
+                            href = realUrl;
+                        } else {
+                            return;
+                        }
+                    }
+
+                    // Skip internal Google links
+                    if (isSerp && this.isGoogleInternalLink(href)) return;
+
                     const absoluteUrl = this.resolveUrl(href);
                     if (!absoluteUrl) return;
 
@@ -647,6 +698,112 @@
                     this.detectAndAdd(cleaned, candidates, currentDomain, 0);
                 } catch (e) { }
             });
+
+            // SERP: Also extract from cite elements (Instagram · username, twitter.com › user)
+            if (isSerp) {
+                this.extractFromSerpCites(doc, candidates, currentDomain);
+            }
+        },
+
+        // SERP-specific extraction from cite elements
+        extractFromSerpCites(doc, candidates, currentDomain) {
+            // Parse cite elements with "Platform · username" format
+            doc.querySelectorAll('cite, span.VuuXrf, div.byrV5b').forEach(cite => {
+                const text = cite.textContent?.trim();
+                if (!text) return;
+
+                // Instagram · username
+                const instaMatch = text.match(/Instagram\s*[·•]\s*([a-zA-Z0-9_.]{1,30})/i);
+                if (instaMatch) {
+                    const url = `https://www.instagram.com/${instaMatch[1]}`;
+                    this.detectAndAdd(url, candidates, currentDomain, 5);
+                    return;
+                }
+
+                // TikTok · @username
+                const tiktokMatch = text.match(/TikTok\s*[·•]\s*@?([a-zA-Z0-9_.]{1,24})/i);
+                if (tiktokMatch) {
+                    const url = `https://www.tiktok.com/@${tiktokMatch[1]}`;
+                    this.detectAndAdd(url, candidates, currentDomain, 5);
+                    return;
+                }
+
+                // Facebook · pagename
+                const fbMatch = text.match(/Facebook\s*[·•]\s*([a-zA-Z0-9_.]{1,50})/i);
+                if (fbMatch) {
+                    const url = `https://www.facebook.com/${fbMatch[1]}`;
+                    this.detectAndAdd(url, candidates, currentDomain, 5);
+                    return;
+                }
+
+                // twitter.com › username or x.com › username
+                const twitterMatch = text.match(/(?:twitter|x)\.com\s*[›>]\s*([a-zA-Z0-9_]{1,15})/i);
+                if (twitterMatch && !['explore', 'home', 'search', 'i'].includes(twitterMatch[1].toLowerCase())) {
+                    const url = `https://x.com/${twitterMatch[1]}`;
+                    this.detectAndAdd(url, candidates, currentDomain, 5);
+                    return;
+                }
+
+                // youtube.com › @channel
+                const ytMatch = text.match(/youtube\.com\s*[›>]\s*@?([a-zA-Z0-9_-]{1,50})/i);
+                if (ytMatch && !['watch', 'shorts', 'playlist'].includes(ytMatch[1].toLowerCase())) {
+                    const url = `https://www.youtube.com/@${ytMatch[1]}`;
+                    this.detectAndAdd(url, candidates, currentDomain, 5);
+                    return;
+                }
+
+                // Generic: domain.com › username
+                const genericMatch = text.match(/^((?:www\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})\s*[›>]\s*([a-zA-Z0-9_@.-]+)/i);
+                if (genericMatch) {
+                    const domain = genericMatch[1].toLowerCase();
+                    const path = genericMatch[3];
+
+                    if (domain.includes('instagram.com') && !['p', 'reel', 'stories', 'explore'].includes(path.toLowerCase())) {
+                        this.detectAndAdd(`https://www.instagram.com/${path}`, candidates, currentDomain, 4);
+                    } else if (domain.includes('twitter.com') || domain.includes('x.com')) {
+                        if (!['explore', 'search', 'i', 'home'].includes(path.toLowerCase())) {
+                            this.detectAndAdd(`https://x.com/${path}`, candidates, currentDomain, 4);
+                        }
+                    } else if (domain.includes('tiktok.com')) {
+                        const username = path.startsWith('@') ? path : `@${path}`;
+                        this.detectAndAdd(`https://www.tiktok.com/${username}`, candidates, currentDomain, 4);
+                    } else if (domain.includes('facebook.com') && !['share', 'sharer', 'watch'].includes(path.toLowerCase())) {
+                        this.detectAndAdd(`https://www.facebook.com/${path}`, candidates, currentDomain, 4);
+                    }
+                }
+            });
+
+            // Also extract @usernames from titles and match to platform from cite
+            doc.querySelectorAll('h3, div.LC20lb').forEach(title => {
+                const text = title.textContent || '';
+                const atMatches = text.matchAll(/@([a-zA-Z0-9_]{1,30})/g);
+
+                for (const match of atMatches) {
+                    const username = match[1];
+                    const parent = title.closest('div.g, div[data-hveid], div.MjjYud');
+                    if (!parent) continue;
+
+                    const citeText = parent.querySelector('cite, span.VuuXrf')?.textContent || '';
+
+                    if (citeText.toLowerCase().includes('instagram')) {
+                        this.detectAndAdd(`https://www.instagram.com/${username}`, candidates, currentDomain, 4);
+                    } else if (citeText.toLowerCase().includes('twitter') || citeText.toLowerCase().includes('x.com')) {
+                        this.detectAndAdd(`https://x.com/${username}`, candidates, currentDomain, 4);
+                    } else if (citeText.toLowerCase().includes('tiktok')) {
+                        this.detectAndAdd(`https://www.tiktok.com/@${username}`, candidates, currentDomain, 4);
+                    }
+                }
+            });
+
+            // Scan visible text for "Instagram · username" patterns
+            const pageText = doc.body?.innerText || '';
+            const instaTextMatches = pageText.matchAll(/Instagram\s*[·•:]\s*([a-zA-Z0-9_.]{2,30})/gi);
+            for (const match of instaTextMatches) {
+                const username = match[1];
+                if (!['com', 'help', 'about', 'blog'].includes(username.toLowerCase())) {
+                    this.detectAndAdd(`https://www.instagram.com/${username}`, candidates, currentDomain, 3);
+                }
+            }
         },
 
         extractFromText(text, candidates, currentDomain) {

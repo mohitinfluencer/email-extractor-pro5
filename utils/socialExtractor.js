@@ -10,8 +10,8 @@
  */
 
 const SocialExtractor = {
-    // Debug mode
-    DEBUG: false,
+    // Debug mode - set to true to see extraction logs in console
+    DEBUG: true,
 
     // Tracking params to remove
     TRACKING_PARAMS: [
@@ -53,9 +53,9 @@ const SocialExtractor = {
             name: 'Instagram',
             priority: 2,
             patterns: [
-                /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)\/?$/i,
-                /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)\?/i,
-                /(?:https?:\/\/)?(?:www\.)?instagr\.am\/([a-zA-Z0-9_.]+)/i
+                /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]{1,30})\/?(?:\?.*)?$/i,
+                /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]{1,30})(?:\/|\?|$)/i,
+                /(?:https?:\/\/)?(?:www\.)?instagr\.am\/([a-zA-Z0-9_.]{1,30})/i
             ],
             rejectPatterns: [
                 /instagram\.com\/p\//i,           // Posts
@@ -153,7 +153,8 @@ const SocialExtractor = {
             name: 'TikTok',
             priority: 4,
             patterns: [
-                /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([a-zA-Z0-9_.]+)/i
+                /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([a-zA-Z0-9_.]{1,24})(?:\/|\?|$)/i,
+                /(?:https?:\/\/)?(?:m\.)?tiktok\.com\/@([a-zA-Z0-9_.]{1,24})(?:\/|\?|$)/i
             ],
             rejectPatterns: [
                 /tiktok\.com\/video\//i,
@@ -232,8 +233,8 @@ const SocialExtractor = {
             name: 'Twitter/X',
             priority: 6,
             patterns: [
-                /(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/([a-zA-Z0-9_]+)\/?$/i,
-                /(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/([a-zA-Z0-9_]+)\?/i
+                /(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/([a-zA-Z0-9_]{1,15})(?:\/|\?|$)/i,
+                /(?:https?:\/\/)?(?:mobile\.)?(?:twitter|x)\.com\/([a-zA-Z0-9_]{1,15})(?:\/|\?|$)/i
             ],
             rejectPatterns: [
                 /(?:twitter|x)\.com\/.*\/status\//i,
@@ -273,8 +274,8 @@ const SocialExtractor = {
             name: 'Facebook',
             priority: 7,
             patterns: [
-                /(?:https?:\/\/)?(?:www\.)?(?:facebook|fb)\.com\/([a-zA-Z0-9.]+)\/?$/i,
-                /(?:https?:\/\/)?(?:www\.)?(?:facebook|fb)\.com\/([a-zA-Z0-9.]+)\?/i,
+                /(?:https?:\/\/)?(?:www\.)?(?:facebook|fb)\.com\/([a-zA-Z0-9.]{3,50})(?:\/|\?|$)/i,
+                /(?:https?:\/\/)?(?:m\.)?(?:facebook|fb)\.com\/([a-zA-Z0-9.]{3,50})(?:\/|\?|$)/i,
                 /(?:https?:\/\/)?(?:www\.)?facebook\.com\/profile\.php\?id=(\d+)/i
             ],
             rejectPatterns: [
@@ -370,7 +371,7 @@ const SocialExtractor = {
                 });
             }
 
-            // Source 1: Anchor tags
+            // Source 1: Anchor tags (SERP-aware)
             this.extractFromAnchors(doc, candidates, currentDomain);
 
             // Source 2: Visible text URLs
@@ -379,10 +380,13 @@ const SocialExtractor = {
             // Source 3: Meta tags
             this.extractFromMeta(doc, candidates, currentDomain);
 
-            // Source 4: Footer/social area (bonus scoring)
+            // Source 4: SERP cite elements (Google shows URLs in cite tags)
+            this.extractFromSerpCites(doc, candidates, currentDomain);
+
+            // Source 5: Footer/social area (bonus scoring)
             this.scoreFooterLinks(doc, candidates);
 
-            // Source 5: Anchor text scoring
+            // Source 6: Anchor text scoring
             this.scoreAnchorText(doc, candidates);
 
             // Process candidates: validate, score, dedupe
@@ -565,14 +569,34 @@ const SocialExtractor = {
     },
 
     /**
-     * Extract from anchor tags
+     * Extract from anchor tags - SERP-AWARE VERSION
      */
     extractFromAnchors(doc, candidates, currentDomain) {
+        const isGoogleSerp = window.location?.hostname?.includes('google.') || false;
+        let totalAnchors = 0;
+        let extractedCount = 0;
+
         doc.querySelectorAll('a[href]').forEach(anchor => {
-            const href = anchor.getAttribute('href');
+            totalAnchors++;
+            let href = anchor.getAttribute('href');
             if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
 
             try {
+                // GOOGLE SERP: Extract real URL from redirect links
+                if (isGoogleSerp && (href.startsWith('/url?') || href.includes('google.com/url?'))) {
+                    const realUrl = this.extractGoogleRedirectUrl(href);
+                    if (realUrl) {
+                        href = realUrl;
+                    } else {
+                        return; // Skip if can't extract
+                    }
+                }
+
+                // Skip internal Google links
+                if (isGoogleSerp && this.isGoogleInternalLink(href)) {
+                    return;
+                }
+
                 const absoluteUrl = this.resolveUrl(href);
                 if (!absoluteUrl) return;
 
@@ -580,8 +604,65 @@ const SocialExtractor = {
                 if (!cleanedUrl) return;
 
                 this.detectAndAddPlatform(cleanedUrl, candidates, currentDomain, 0);
+                extractedCount++;
             } catch (e) { }
         });
+
+        // Also check data-href and data-url attributes (some sites use these)
+        doc.querySelectorAll('[data-href], [data-url]').forEach(el => {
+            const href = el.getAttribute('data-href') || el.getAttribute('data-url');
+            if (!href || !href.startsWith('http')) return;
+
+            try {
+                const cleanedUrl = this.cleanUrl(href);
+                if (cleanedUrl) {
+                    this.detectAndAddPlatform(cleanedUrl, candidates, currentDomain, 0);
+                }
+            } catch (e) { }
+        });
+
+        if (this.DEBUG) {
+            console.log(`[SocialExtractor] Anchors: ${totalAnchors} total, ${extractedCount} extracted`);
+        }
+    },
+
+    /**
+     * Extract real URL from Google redirect link
+     */
+    extractGoogleRedirectUrl(href) {
+        try {
+            // Handle relative URLs
+            let url;
+            if (href.startsWith('/url?')) {
+                url = new URL(href, 'https://www.google.com');
+            } else {
+                url = new URL(href);
+            }
+
+            // Try 'q' param first (most common), then 'url'
+            const realUrl = url.searchParams.get('q') || url.searchParams.get('url');
+            if (realUrl && realUrl.startsWith('http')) {
+                return decodeURIComponent(realUrl);
+            }
+        } catch (e) { }
+        return null;
+    },
+
+    /**
+     * Check if URL is internal Google link (skip these)
+     */
+    isGoogleInternalLink(href) {
+        const skipPatterns = [
+            '/search?', '/preferences', '/imgres?', '/setprefs?',
+            'accounts.google.com', 'policies.google.com', 'support.google.com',
+            'maps.google.com', 'translate.google.com', 'mail.google.com',
+            'ssl.gstatic.com', 'gstatic.com', 'googleadservices.com',
+            'www.google.com/preferences', 'www.google.com/settings',
+            '/webhp', '/advanced_search', '/intl/'
+        ];
+
+        const lowerHref = href.toLowerCase();
+        return skipPatterns.some(pattern => lowerHref.includes(pattern));
     },
 
     /**
@@ -623,6 +704,177 @@ const SocialExtractor = {
                 }
             });
         });
+    },
+
+    /**
+     * Extract from SERP - COMPREHENSIVE GOOGLE SERP EXTRACTION
+     */
+    extractFromSerpCites(doc, candidates, currentDomain) {
+        // Only run on Google
+        if (!window.location?.hostname?.includes('google.')) return;
+
+        let extractedCount = 0;
+
+        // METHOD 1: Extract from search result cards
+        // Google shows profile cards with links
+        const resultCards = doc.querySelectorAll('div.g, div[data-hveid], div.MjjYud');
+
+        resultCards.forEach(card => {
+            // Find all links in this result card
+            card.querySelectorAll('a[href]').forEach(link => {
+                let href = link.getAttribute('href');
+                if (!href) return;
+
+                // Handle Google redirect URLs
+                if (href.startsWith('/url?') || href.includes('google.com/url?')) {
+                    href = this.extractGoogleRedirectUrl(href);
+                    if (!href) return;
+                }
+
+                // Skip internal Google links
+                if (this.isGoogleInternalLink(href)) return;
+
+                try {
+                    const cleanedUrl = this.cleanUrl(href);
+                    if (cleanedUrl) {
+                        this.detectAndAddPlatform(cleanedUrl, candidates, currentDomain, 5);
+                        extractedCount++;
+                    }
+                } catch (e) { }
+            });
+        });
+
+        // METHOD 2: Parse cite elements with platform · username format
+        // Instagram shows: "Instagram · username"
+        // Twitter shows: "twitter.com › Explore" but also has username in nearby text
+        const citeElements = doc.querySelectorAll('cite, span.VuuXrf, div.byrV5b');
+
+        citeElements.forEach(cite => {
+            const text = cite.textContent?.trim();
+            if (!text) return;
+
+            // Pattern: "Instagram · username" or "Instagram · username · date"
+            const instagramMatch = text.match(/Instagram\s*[·•]\s*([a-zA-Z0-9_.]{1,30})/i);
+            if (instagramMatch) {
+                const username = instagramMatch[1];
+                const url = `https://www.instagram.com/${username}`;
+                this.detectAndAddPlatform(url, candidates, currentDomain, 6);
+                extractedCount++;
+                return;
+            }
+
+            // Pattern: "TikTok · @username" or just the username display
+            const tiktokMatch = text.match(/TikTok\s*[·•]\s*@?([a-zA-Z0-9_.]{1,24})/i);
+            if (tiktokMatch) {
+                const username = tiktokMatch[1];
+                const url = `https://www.tiktok.com/@${username}`;
+                this.detectAndAddPlatform(url, candidates, currentDomain, 6);
+                extractedCount++;
+                return;
+            }
+
+            // Pattern: "Facebook · pagename"
+            const facebookMatch = text.match(/Facebook\s*[·•]\s*([a-zA-Z0-9_.]{1,50})/i);
+            if (facebookMatch) {
+                const pagename = facebookMatch[1];
+                const url = `https://www.facebook.com/${pagename}`;
+                this.detectAndAddPlatform(url, candidates, currentDomain, 6);
+                extractedCount++;
+                return;
+            }
+
+            // Pattern: "twitter.com › username" or "x.com › username"  
+            const twitterCiteMatch = text.match(/(?:twitter|x)\.com\s*[›>]\s*([a-zA-Z0-9_]{1,15})/i);
+            if (twitterCiteMatch && twitterCiteMatch[1].toLowerCase() !== 'explore') {
+                const username = twitterCiteMatch[1];
+                const url = `https://x.com/${username}`;
+                this.detectAndAddPlatform(url, candidates, currentDomain, 6);
+                extractedCount++;
+                return;
+            }
+
+            // Pattern: "youtube.com › @channel" or "youtube.com › channel"
+            const youtubeMatch = text.match(/youtube\.com\s*[›>]\s*@?([a-zA-Z0-9_-]{1,50})/i);
+            if (youtubeMatch && !['watch', 'shorts', 'playlist', 'results'].includes(youtubeMatch[1].toLowerCase())) {
+                const channel = youtubeMatch[1];
+                const url = `https://www.youtube.com/@${channel}`;
+                this.detectAndAddPlatform(url, candidates, currentDomain, 6);
+                extractedCount++;
+                return;
+            }
+
+            // Generic pattern: "domain.com › path"
+            const genericMatch = text.match(/^((?:www\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})\s*[›>]\s*(.+)/i);
+            if (genericMatch) {
+                const domain = genericMatch[1];
+                const path = genericMatch[3].split(/\s*[›>·•]\s*/)[0].trim();
+
+                if (domain.includes('instagram.com') && path && !['p', 'reel', 'stories', 'explore'].includes(path.toLowerCase())) {
+                    const url = `https://www.instagram.com/${path}`;
+                    this.detectAndAddPlatform(url, candidates, currentDomain, 5);
+                    extractedCount++;
+                } else if ((domain.includes('twitter.com') || domain.includes('x.com')) && path && !['explore', 'search', 'i'].includes(path.toLowerCase())) {
+                    const url = `https://x.com/${path}`;
+                    this.detectAndAddPlatform(url, candidates, currentDomain, 5);
+                    extractedCount++;
+                } else if (domain.includes('tiktok.com') && path) {
+                    const username = path.startsWith('@') ? path : `@${path}`;
+                    const url = `https://www.tiktok.com/${username}`;
+                    this.detectAndAddPlatform(url, candidates, currentDomain, 5);
+                    extractedCount++;
+                } else if (domain.includes('facebook.com') && path && !['share', 'sharer', 'watch'].includes(path.toLowerCase())) {
+                    const url = `https://www.facebook.com/${path}`;
+                    this.detectAndAddPlatform(url, candidates, currentDomain, 5);
+                    extractedCount++;
+                }
+            }
+        });
+
+        // METHOD 3: Extract usernames from result titles (Google shows @username in titles)
+        const titles = doc.querySelectorAll('h3, div.LC20lb, span.CVA68e');
+        titles.forEach(title => {
+            const text = title.textContent || '';
+
+            // Look for @username patterns in titles
+            const atMatches = text.matchAll(/@([a-zA-Z0-9_]{1,30})/g);
+            for (const match of atMatches) {
+                const username = match[1];
+
+                // Try to determine platform from nearby cite
+                const parent = title.closest('div.g, div[data-hveid], div.MjjYud');
+                if (parent) {
+                    const citeText = parent.querySelector('cite, span.VuuXrf')?.textContent || '';
+
+                    if (citeText.includes('instagram') || citeText.includes('Instagram')) {
+                        this.detectAndAddPlatform(`https://www.instagram.com/${username}`, candidates, currentDomain, 4);
+                        extractedCount++;
+                    } else if (citeText.includes('twitter') || citeText.includes('x.com')) {
+                        this.detectAndAddPlatform(`https://x.com/${username}`, candidates, currentDomain, 4);
+                        extractedCount++;
+                    } else if (citeText.includes('tiktok') || citeText.includes('TikTok')) {
+                        this.detectAndAddPlatform(`https://www.tiktok.com/@${username}`, candidates, currentDomain, 4);
+                        extractedCount++;
+                    }
+                }
+            }
+        });
+
+        // METHOD 4: Extract from visible text that looks like profile URLs
+        const searchText = doc.body?.innerText || '';
+
+        // Find Instagram usernames in text: "Instagram · username"
+        const instaTextMatches = searchText.matchAll(/Instagram\s*[·•:]\s*([a-zA-Z0-9_.]{2,30})/gi);
+        for (const match of instaTextMatches) {
+            const username = match[1];
+            if (!['com', 'help', 'about', 'blog'].includes(username.toLowerCase())) {
+                this.detectAndAddPlatform(`https://www.instagram.com/${username}`, candidates, currentDomain, 3);
+                extractedCount++;
+            }
+        }
+
+        if (this.DEBUG) {
+            console.log(`[SocialExtractor] SERP extraction: ${extractedCount} URLs found`);
+        }
     },
 
     /**
@@ -736,20 +988,33 @@ const SocialExtractor = {
      * Detect platform and add to candidates
      */
     detectAndAddPlatform(url, candidates, currentDomain, baseScore) {
+        if (this.DEBUG && (url.includes('instagram') || url.includes('twitter') || url.includes('tiktok') || url.includes('facebook') || url.includes('youtube'))) {
+            console.log(`[SocialExtractor] Processing social URL: ${url}`);
+        }
+
         // Check each platform
         for (const [platformKey, config] of Object.entries(this.PLATFORMS)) {
             // Check if URL matches any reject pattern
             if (config.rejectPatterns.some(p => p.test(url))) {
+                if (this.DEBUG && (url.includes('instagram') || url.includes('twitter'))) {
+                    console.log(`[SocialExtractor] REJECTED by pattern for ${platformKey}: ${url}`);
+                }
                 continue;
             }
 
             // Check if URL matches accept pattern
             if (config.patterns.some(p => p.test(url))) {
                 const canonical = config.canonicalize(url);
-                if (!canonical) continue;
+                if (!canonical) {
+                    if (this.DEBUG) console.log(`[SocialExtractor] Canonicalize failed for ${platformKey}: ${url}`);
+                    continue;
+                }
 
                 const username = config.extractUsername(url);
-                if (!config.validate(url, username)) continue;
+                if (!config.validate(url, username)) {
+                    if (this.DEBUG) console.log(`[SocialExtractor] Validate failed for ${platformKey}: ${url}, username: ${username}`);
+                    continue;
+                }
 
                 const key = canonical.toLowerCase();
                 if (!candidates.has(key)) {
@@ -759,6 +1024,7 @@ const SocialExtractor = {
                         username: username,
                         score: baseScore + 4 // Perfect pattern match bonus
                     });
+                    if (this.DEBUG) console.log(`[SocialExtractor] ADDED ${platformKey}: ${canonical}`);
                 } else {
                     // Increase score for repeated links
                     candidates.get(key).score += 2;
