@@ -562,15 +562,38 @@
         // Known social domains to exclude from website detection
         SOCIAL_DOMAINS: [
             'facebook.com', 'fb.com', 'instagram.com', 'twitter.com', 'x.com',
-            'linkedin.com', 'youtube.com', 'youtu.be', 'tiktok.com', 'whatsapp.com',
+            'linkedin.com', 'linkedin.at', 'linkedin.be', 'linkedin.ca', 'linkedin.cn',
+            'youtube.com', 'youtu.be', 'tiktok.com', 'whatsapp.com',
             'wa.me', 'pinterest.com', 'snapchat.com', 'reddit.com', 'telegram.org',
             't.me', 'discord.gg', 'discord.com', 'tumblr.com', 'medium.com',
             'github.com', 'vimeo.com', 'twitch.tv', 'spotify.com', 'google.com',
-            'apple.com', 'bit.ly', 'linktr.ee', 'beacons.ai'
+            'apple.com', 'bit.ly', 'linktr.ee', 'beacons.ai', 't.co'
+        ],
+
+        // Comprehensive blacklist for junk domains
+        BLACKLIST_DOMAINS: [
+            // Google Assets
+            'ssl.gstatic.com', 'gstatic.com', 'googleadservices.com', 'googlesyndication.com',
+            'googletagmanager.com', 'doubleclick.net', 'googleusercontent.com', 'googleapis.com',
+            'google.com', 'google.co.in', 'google.co', 'google.net', 'google.org',
+
+            // Standards & System
+            'w3.org', 'schema.org', 'iana.org', 'icann.org', 'ieee.org',
+
+            // CDNs & Libraries
+            'cloudflare.com', 'jsdelivr.net', 'unpkg.com', 'bootstrapcdn.com', 'cdnjs.com',
+            'fonts.googleapis.com', 'fonts.gstatic.com', 'ajax.googleapis.com',
+
+            // Email Providers
+            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
+            'me.com', 'mail.com', 'protonmail.com', 'zoho.com', 'aol.com',
+
+            // System/Dev
+            'localhost', '127.0.0.1', 'example.com', 'test.com', 'api.com'
         ],
 
         // Rejected website paths
-        REJECTED_PATHS: ['/privacy', '/terms', '/legal', '/blog', '/wp-content', '/tag', '/category', '/search', '/api', '/login'],
+        REJECTED_PATHS: ['/privacy', '/terms', '/legal', '/blog', '/wp-content', '/tag', '/category', '/search', '/api', '/login', '/wp-includes'],
 
         /**
          * Main extraction - returns one best link per platform
@@ -582,6 +605,17 @@
                 const doc = new DOMParser().parseFromString(html, 'text/html');
                 const currentDomain = this.getCurrentDomain();
                 const candidates = new Map(); // url -> {platform, url, score}
+
+                // FIRST: Add current page domain as highest priority website
+                // This ensures the website link of the current page is always captured
+                if (currentDomain && !this.isBlacklistedDomain(currentDomain)) {
+                    const currentRootUrl = `https://${currentDomain}`;
+                    candidates.set(currentRootUrl.toLowerCase(), {
+                        platform: 'website',
+                        url: currentRootUrl,
+                        score: 100 // Highest priority - current page
+                    });
+                }
 
                 // Extract from anchor tags
                 this.extractFromAnchors(doc, candidates, currentDomain);
@@ -662,9 +696,14 @@
 
         // Check if URL is internal Google link
         isGoogleInternalLink(href) {
-            const skip = ['/search?', '/preferences', '/imgres?', 'accounts.google.com',
+            const skip = [
+                '/search?', '/preferences', '/imgres?', 'accounts.google.com',
                 'policies.google.com', 'support.google.com', 'ssl.gstatic.com', 'gstatic.com',
-                'googleadservices.com', '/webhp', '/advanced_search'];
+                'googleadservices.com', 'googlesyndication.com', 'googletagmanager.com',
+                'doubleclick.net', 'googleusercontent.com', 'googleapis.com',
+                'google.com', 'google.co.in', 'google.co', 'google.net', 'google.org',
+                '/webhp', '/advanced_search', 'w3.org', 'schema.org'
+            ];
             return skip.some(p => href.toLowerCase().includes(p));
         },
 
@@ -889,14 +928,39 @@
 
         detectWebsite(url, candidates, currentDomain, baseScore) {
             try {
-                const parsed = new URL(url);
-                const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+                // Must be a string and start with http
+                if (!url || typeof url !== 'string' || !url.startsWith('http')) return;
 
-                if (currentDomain && hostname === currentDomain) return;
-                if (this.SOCIAL_DOMAINS.some(social => hostname.includes(social))) return;
+                // REJECT: URLs containing @ or + (likely emails or phones masked as URLs)
+                if (url.includes('@') || url.includes('+')) return;
+
+                const parsed = new URL(url);
+                const hostname = parsed.hostname.toLowerCase();
+                const hostnameNoWww = hostname.replace('www.', '');
+
+                // 1. REJECT: Current page domain (don't list own site)
+                if (currentDomain && hostnameNoWww === currentDomain) return;
+
+                // 2. REJECT: Known Social Domains
+                if (this.SOCIAL_DOMAINS.some(social => hostnameNoWww === social || hostnameNoWww.endsWith('.' + social))) return;
+
+                // 3. REJECT: Blacklisted/Junk Domains
+                if (this.BLACKLIST_DOMAINS.some(blocked => hostnameNoWww === blocked || hostnameNoWww.endsWith('.' + blocked))) return;
+
+                // 4. REJECT: Pure numeric or IP hostnames
+                if (/^[\d.]+$/.test(hostnameNoWww)) return;
+                if (hostnameNoWww.split('.').length < 2) return;
+
+                // 5. REJECT: System/Internal Google patterns
+                if (hostnameNoWww.includes('google.') || hostnameNoWww.includes('.google')) return;
+
+                // 6. REJECT: Certain file extensions
+                if (/\.(png|jpg|jpeg|gif|svg|ico|css|js|woff|woff2|ttf|pdf|zip|mp3|mp4)$/i.test(parsed.pathname)) return;
+
+                // 7. REJECT: Common junk paths
                 if (this.REJECTED_PATHS.some(p => parsed.pathname.toLowerCase().startsWith(p))) return;
 
-                const rootUrl = `https://${parsed.hostname}`;
+                const rootUrl = `https://${hostname}`;
                 const key = rootUrl.toLowerCase();
 
                 if (!candidates.has(key)) {
@@ -935,6 +999,26 @@
             } catch {
                 return '';
             }
+        },
+
+        /**
+         * Check if a domain is blacklisted (CDNs, email providers, social platforms, etc.)
+         */
+        isBlacklistedDomain(hostname) {
+            if (!hostname) return true;
+            const h = hostname.toLowerCase().replace('www.', '');
+
+            // Check against social domains
+            if (this.SOCIAL_DOMAINS.some(social => h === social || h.endsWith('.' + social))) {
+                return true;
+            }
+
+            // Check against blacklist domains
+            if (this.BLACKLIST_DOMAINS.some(blocked => h === blocked || h.endsWith('.' + blocked))) {
+                return true;
+            }
+
+            return false;
         },
 
         resolveUrl(href) {
