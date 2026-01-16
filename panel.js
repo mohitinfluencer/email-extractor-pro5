@@ -748,10 +748,28 @@ function updateSavedTotal() {
 }
 
 // Item creators
-function createEmailItem(email, isSaved = false) {
+function createEmailItem(emailData, isSaved = false) {
     const div = document.createElement('div');
     div.className = 'item';
-    const name = state.settings.generateNames ? (window.NameGenerator?.generate(email) || '') : '';
+
+    // Handle both string and object formats
+    let email, name;
+    if (typeof emailData === 'string') {
+        email = emailData;
+        name = state.settings.generateNames ? (window.NameGenerator?.generate(email) || '') : '';
+    } else if (emailData && typeof emailData === 'object') {
+        email = emailData.email || '';
+        name = emailData.name || (state.settings.generateNames ? (window.NameGenerator?.generate(email) || '') : '');
+    } else {
+        email = '';
+        name = '';
+    }
+
+    // Skip if no valid email
+    if (!email) {
+        div.innerHTML = '<div class="item-content"><div class="item-value">Invalid email data</div></div>';
+        return div;
+    }
 
     div.innerHTML = `
     <div class="item-content">
@@ -776,8 +794,11 @@ function createEmailItem(email, isSaved = false) {
     div.querySelector('.item-copy').addEventListener('click', () => copyToClipboard(email, 'Email copied!'));
     if (isSaved) {
         div.querySelector('.item-delete').addEventListener('click', async () => {
-            await Storage.deleteSavedItem('emails', email);
-            state.saved.emails = state.saved.emails.filter(e => e !== email);
+            await Storage.deleteSavedItem('emails', emailData);
+            state.saved.emails = state.saved.emails.filter(e => {
+                const eEmail = typeof e === 'string' ? e : e?.email;
+                return eEmail !== email;
+            });
             renderSavedEmails();
             updateStats();
             updateTabCounts();
@@ -837,9 +858,15 @@ function openModal(type, items, isSaved = false, title = '') {
     renderModalItems(items);
 
     el.modalCopy.onclick = () => {
-        const data = type === 'socials'
-            ? items.map(l => l.url || l).join('\n')
-            : items.join('\n');
+        let data;
+        if (type === 'emails') {
+            // Handle both string and object email formats
+            data = items.map(e => typeof e === 'string' ? e : (e?.email || '')).filter(Boolean).join('\n');
+        } else if (type === 'socials') {
+            data = items.map(l => l.url || l).join('\n');
+        } else {
+            data = items.map(p => typeof p === 'string' ? p : (p?.phone || '')).filter(Boolean).join('\n');
+        }
         copyToClipboard(data, 'Copied to clipboard!');
     };
 
@@ -859,11 +886,36 @@ function renderModalItems(items) {
     list.className = 'items-list';
 
     items.forEach(item => {
-        const value = typeof item === 'string' ? item : item.url;
+        // Handle different item formats
+        let value, name = '';
+
+        if (modalData.type === 'emails') {
+            // Email can be string or object { email, name }
+            if (typeof item === 'string') {
+                value = item;
+            } else if (item && typeof item === 'object') {
+                value = item.email || '';
+                name = item.name || '';
+            } else {
+                return; // Skip invalid items
+            }
+            if (!value) return;
+
+            // Generate name if enabled and not already set
+            if (!name && state.settings.generateNames) {
+                name = window.NameGenerator?.generate(value) || '';
+            }
+        } else if (modalData.type === 'phones') {
+            value = typeof item === 'string' ? item : (item?.phone || '');
+            if (!value) return;
+        } else {
+            // Socials
+            value = typeof item === 'string' ? item : item.url;
+            if (!value) return;
+        }
+
         const div = document.createElement('div');
         div.className = 'item';
-        const name = modalData.type === 'emails' && state.settings.generateNames
-            ? (window.NameGenerator?.generate(value) || '') : '';
 
         div.innerHTML = `
       <div class="item-content">
@@ -889,8 +941,11 @@ function renderModalItems(items) {
 
         if (modalData.isSaved) {
             div.querySelector('.item-delete').addEventListener('click', async () => {
-                await Storage.deleteSavedItem(modalData.type, value);
-                modalData.items = modalData.items.filter(i => (i.url || i) !== value);
+                await Storage.deleteSavedItem(modalData.type, item);
+                modalData.items = modalData.items.filter(i => {
+                    const iValue = typeof i === 'string' ? i : (i?.email || i?.url || i?.phone || '');
+                    return iValue !== value;
+                });
                 renderModalItems(modalData.items);
                 await loadData();
                 renderAll();
@@ -903,10 +958,19 @@ function renderModalItems(items) {
     el.modalContent.appendChild(list);
 }
 
+
 function filterModalItems() {
     const search = el.modalSearch.value.toLowerCase();
     const filtered = modalData.items.filter(item => {
-        const value = typeof item === 'string' ? item : item.url;
+        // Handle both string and object formats
+        let value;
+        if (typeof item === 'string') {
+            value = item;
+        } else if (item && typeof item === 'object') {
+            value = item.email || item.url || item.phone || '';
+        } else {
+            value = '';
+        }
         return value.toLowerCase().includes(search);
     });
     renderModalItems(filtered);
@@ -917,13 +981,21 @@ function exportCSV(type, items) {
 
     if (type === 'emails') {
         csv = 'Email,Name\n';
-        items.forEach(email => {
-            const name = window.NameGenerator?.generate(email) || '';
+        items.forEach(emailData => {
+            // Handle both string and object formats
+            const email = typeof emailData === 'string' ? emailData : (emailData?.email || '');
+            if (!email) return;
+            const name = (typeof emailData === 'object' && emailData?.name)
+                ? emailData.name
+                : (window.NameGenerator?.generate(email) || '');
             csv += `"${email}","${name}"\n`;
         });
     } else if (type === 'phones') {
         csv = 'Phone\n';
-        items.forEach(phone => csv += `"${phone}"\n`);
+        items.forEach(phoneData => {
+            const phone = typeof phoneData === 'string' ? phoneData : (phoneData?.phone || '');
+            if (phone) csv += `"${phone}"\n`;
+        });
     } else if (type === 'socials') {
         csv = 'Platform,URL\n';
         items.forEach(item => {

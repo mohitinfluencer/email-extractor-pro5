@@ -1388,7 +1388,54 @@
             }
         }
 
+        // UPDATE BADGE with total lead count
+        updateBadgeCount(response);
+
         return response;
+    }
+
+    /**
+     * Update extension badge with total lead count
+     */
+    function updateBadgeCount(response) {
+        try {
+            // Count total leads
+            let totalLeads = 0;
+
+            // Count emails
+            totalLeads += (response.emails || []).length;
+
+            // Count phones
+            totalLeads += (response.phones || []).length;
+
+            // Count social links (excluding website category)
+            if (response.socialsByPlatform) {
+                for (const [platform, links] of Object.entries(response.socialsByPlatform)) {
+                    if (platform !== 'website') {
+                        totalLeads += (links || []).length;
+                    }
+                }
+            }
+
+            // Count SERP LinkedIn links
+            if (response.serpLinks && response.serpLinks.linkedin) {
+                totalLeads += response.serpLinks.linkedin.length;
+            }
+
+            // Send to background script
+            chrome.runtime.sendMessage({
+                type: 'UPDATE_BADGE',
+                count: totalLeads
+            }, () => {
+                // Ignore response errors (background might not be ready)
+                if (chrome.runtime.lastError) {
+                    // Silently ignore
+                }
+            });
+        } catch (e) {
+            // Badge update is non-critical, don't crash
+            console.warn('[ContentScript] Badge update failed:', e.message);
+        }
     }
 
     /**
@@ -1443,5 +1490,178 @@
         return result;
     }
 
-    console.log('[Email Extractor Pro] Content script loaded (v3.0 - Timeout Safe)');
+    // ====== AUTO-EXTRACTION ON PAGE LOAD ======
+    // Automatically extract when extension is Active
+    function autoExtractOnLoad() {
+        // Check if extension is active from storage
+        chrome.storage.local.get(['settings'], (data) => {
+            // Get active state from settings.active (this is where popup stores it)
+            const isActive = data.settings?.active !== false;
+
+            // Get autosave setting from nested settings object
+            const autosave = data.settings?.autosave === true;
+
+            if (!isActive) {
+                // Extension is inactive, clear badge and stop
+                chrome.runtime.sendMessage({ type: 'UPDATE_BADGE', count: 0 }, () => {
+                    if (chrome.runtime.lastError) { /* ignore */ }
+                });
+                console.log('[Email Extractor Pro] Extension inactive - skipping extraction');
+                return;
+            }
+
+
+            // Get extraction settings from settings object (default all ON)
+            const extractEmails = data.settings?.extractEmails !== false;
+            const extractPhones = data.settings?.extractPhones !== false;
+            const extractSocials = data.settings?.extractSocials !== false;
+            const extractSerpLinks = data.settings?.extractSerp === true;
+            const selectedCountries = data.settings?.selectedCountries || [];
+
+            // Build request
+            const request = {
+                extractEmails,
+                extractPhones,
+                extractSocials,
+                extractSerpLinks,
+                selectedCountries,
+                validateEmails: true
+            };
+
+            // Run extraction
+            try {
+                const result = safeExtractData(request);
+                console.log('[Email Extractor Pro] Auto-extracted:', {
+                    emails: result.emails?.length || 0,
+                    phones: result.phones?.length || 0,
+                    socials: result.socialLinks?.length || 0
+                });
+
+                // AUTOSAVE: If autosave is enabled, save to storage
+                if (autosave) {
+                    autosaveToStorage(result);
+                }
+            } catch (e) {
+                console.error('[Email Extractor Pro] Auto-extraction failed:', e.message);
+            }
+        });
+    }
+
+    /**
+     * Autosave extracted results to chrome.storage.local
+     * Merges with existing saved data (append, never overwrite)
+     */
+    function autosaveToStorage(results) {
+        chrome.storage.local.get(['saved'], (data) => {
+            try {
+                const existingSaved = data.saved || {
+                    emails: [],
+                    phones: [],
+                    socialLinks: [],
+                    serpLinks: { linkedin: [] }
+                };
+
+                // Helper: merge arrays with deduplication
+                const mergeUnique = (oldList, newList, keyFn) => {
+                    const map = new Map();
+                    for (const item of (oldList || [])) {
+                        const key = keyFn(item);
+                        if (key) map.set(String(key).toLowerCase(), item);
+                    }
+                    for (const item of (newList || [])) {
+                        const key = keyFn(item);
+                        if (key) map.set(String(key).toLowerCase(), item);
+                    }
+                    return Array.from(map.values());
+                };
+
+                // Merge emails (dedupe by email address)
+                // Ensure proper object format { email: '...', name: '...' }
+                const normalizeEmail = (e) => {
+                    if (typeof e === 'string') {
+                        return { email: e, name: '' };
+                    } else if (e && typeof e === 'object') {
+                        return {
+                            email: e.email || '',
+                            name: e.name || ''
+                        };
+                    }
+                    return null;
+                };
+
+                const mergedEmails = mergeUnique(
+                    existingSaved.emails.map(normalizeEmail).filter(e => e && e.email),
+                    (results.emails || []).map(normalizeEmail).filter(e => e && e.email),
+                    item => item.email
+                );
+
+                // Merge phones (dedupe by phone number)
+                const mergedPhones = mergeUnique(
+                    existingSaved.phones,
+                    (results.phones || []).map(p => typeof p === 'string' ? { phone: p } : p),
+                    item => String(item.phone || item).replace(/\D/g, '')
+                );
+
+                // Merge social links (dedupe by URL)
+                const mergedSocials = mergeUnique(
+                    existingSaved.socialLinks,
+                    results.socialLinks || [],
+                    item => item.url || item
+                );
+
+                // Merge SERP LinkedIn links
+                const existingLinkedIn = existingSaved.serpLinks?.linkedin || [];
+                const newLinkedIn = results.serpLinks?.linkedin || [];
+                const mergedLinkedIn = [...new Set([...existingLinkedIn, ...newLinkedIn])];
+
+                const mergedSaved = {
+                    emails: mergedEmails,
+                    phones: mergedPhones,
+                    socialLinks: mergedSocials,
+                    serpLinks: { linkedin: mergedLinkedIn }
+                };
+
+                // Save to storage
+                chrome.storage.local.set({ saved: mergedSaved }, () => {
+                    console.log('[Email Extractor Pro] Autosaved:', {
+                        emails: mergedEmails.length,
+                        phones: mergedPhones.length,
+                        socials: mergedSocials.length,
+                        linkedin: mergedLinkedIn.length
+                    });
+                });
+            } catch (e) {
+                console.error('[Email Extractor Pro] Autosave failed:', e.message);
+            }
+        });
+    }
+
+    // Run auto-extraction after a short delay (let page fully load)
+    setTimeout(() => {
+        autoExtractOnLoad();
+    }, 1500);
+
+    // Also re-extract when page content changes significantly (SPA support)
+    let lastExtractTime = Date.now();
+    const observer = new MutationObserver(() => {
+        // Debounce: only re-extract if 3+ seconds since last extraction
+        if (Date.now() - lastExtractTime > 3000) {
+            lastExtractTime = Date.now();
+            autoExtractOnLoad();
+        }
+    });
+
+    // Observe body for major changes (but not too aggressively)
+    setTimeout(() => {
+        if (document.body) {
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: false,
+                characterData: false
+            });
+        }
+    }, 2000);
+
+    console.log('[Email Extractor Pro] Content script loaded (v3.1 - Auto Extract)');
 })();
