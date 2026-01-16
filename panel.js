@@ -291,7 +291,7 @@ function setupEventListeners() {
     });
 
     document.getElementById('copyLivePhones').addEventListener('click', () =>
-        copyToClipboard(state.results.phones?.join('\n'), 'Phones copied!'));
+        copyToClipboard(state.results.phones?.map(p => typeof p === 'string' ? p : p?.phone).filter(Boolean).join('\n'), 'Phones copied!'));
     document.getElementById('clearLivePhones').addEventListener('click', async () => {
         await Storage.clearResults('phones');
         state.results.phones = [];
@@ -320,7 +320,7 @@ function setupEventListeners() {
 
     // Saved copy/clear
     document.getElementById('copySavedEmails').addEventListener('click', () =>
-        copyToClipboard(state.saved.emails?.join('\n'), 'Emails copied!'));
+        copyToClipboard(state.saved.emails?.map(e => typeof e === 'string' ? e : e?.email).filter(Boolean).join('\n'), 'Emails copied!'));
     document.getElementById('clearSavedEmails').addEventListener('click', async () => {
         await Storage.clearSaved('emails');
         state.saved.emails = [];
@@ -331,7 +331,7 @@ function setupEventListeners() {
     });
 
     document.getElementById('copySavedPhones').addEventListener('click', () =>
-        copyToClipboard(state.saved.phones?.join('\n'), 'Phones copied!'));
+        copyToClipboard(state.saved.phones?.map(p => typeof p === 'string' ? p : p?.phone).filter(Boolean).join('\n'), 'Phones copied!'));
     document.getElementById('clearSavedPhones').addEventListener('click', async () => {
         await Storage.clearSaved('phones');
         state.saved.phones = [];
@@ -808,13 +808,31 @@ function createEmailItem(emailData, isSaved = false) {
     return div;
 }
 
-function createPhoneItem(phone, isSaved = false) {
+function createPhoneItem(phoneData, isSaved = false) {
     const div = document.createElement('div');
     div.className = 'item';
 
+    // Handle both string and object formats
+    let phone;
+    if (typeof phoneData === 'string') {
+        phone = phoneData;
+    } else if (phoneData && typeof phoneData === 'object') {
+        phone = phoneData.phone || '';
+    } else {
+        phone = '';
+    }
+
+    // Skip if no valid phone
+    if (!phone) {
+        div.innerHTML = '<div class="item-content"><div class="item-value">Invalid phone data</div></div>';
+        return div;
+    }
+
+    const displayPhone = String(phone).startsWith('+') ? phone : '+' + phone;
+
     div.innerHTML = `
     <div class="item-content">
-      <div class="item-value">${phone.startsWith('+') ? phone : '+' + phone}</div>
+      <div class="item-value">${displayPhone}</div>
     </div>
     <div class="item-actions">
       <button class="item-copy" title="Copy">
@@ -834,8 +852,11 @@ function createPhoneItem(phone, isSaved = false) {
     div.querySelector('.item-copy').addEventListener('click', () => copyToClipboard(phone, 'Phone copied!'));
     if (isSaved) {
         div.querySelector('.item-delete').addEventListener('click', async () => {
-            await Storage.deleteSavedItem('phones', phone);
-            state.saved.phones = state.saved.phones.filter(p => p !== phone);
+            await Storage.deleteSavedItem('phones', phoneData);
+            state.saved.phones = state.saved.phones.filter(p => {
+                const pPhone = typeof p === 'string' ? p : p?.phone;
+                return pPhone !== phone;
+            });
             renderSavedPhones();
             updateStats();
             updateTabCounts();
