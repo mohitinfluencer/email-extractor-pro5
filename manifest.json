@@ -34,6 +34,14 @@
             "matches": [
                 "<all_urls>"
             ],
+            "exclude_matches": [
+                "*://docs.google.com/*",
+                "*://drive.google.com/*",
+                "*://sheets.google.com/*",
+                "*://slides.google.com/*",
+                "*://chrome.google.com/*",
+                "*://extensions/*"
+            ],
             "js": [
                 "content.js"
             ],
