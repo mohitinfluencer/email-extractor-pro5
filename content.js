@@ -65,6 +65,54 @@
             }
         }
 
+        // Helper: Clean duplicates from a saved data object
+        function cleanDuplicates(saved) {
+            // Dedupe emails (case-insensitive)
+            const emailMap = new Map();
+            for (const e of (saved.emails || [])) {
+                const email = (typeof e === 'string' ? e : e?.email || '').toLowerCase().trim();
+                if (email && !emailMap.has(email)) {
+                    emailMap.set(email, typeof e === 'string' ? { email: e.trim(), name: '' } : e);
+                }
+            }
+
+            // Dedupe phones (digits only)
+            const phoneMap = new Map();
+            for (const p of (saved.phones || [])) {
+                const phone = (typeof p === 'string' ? p : p?.phone || '').replace(/\D/g, '');
+                if (phone.length >= 7 && !phoneMap.has(phone)) {
+                    phoneMap.set(phone, typeof p === 'string' ? { phone: p.trim() } : p);
+                }
+            }
+
+            // Dedupe social links (case-insensitive URL)
+            const socialMap = new Map();
+            for (const s of (saved.socialLinks || [])) {
+                const url = (s?.url || s || '').toLowerCase().trim();
+                if (url && !socialMap.has(url)) {
+                    socialMap.set(url, s);
+                }
+            }
+
+            // Dedupe LinkedIn links
+            const linkedinSet = new Set();
+            const linkedinList = [];
+            for (const url of (saved.serpLinks?.linkedin || [])) {
+                const normalized = (url || '').toLowerCase().trim();
+                if (normalized && !linkedinSet.has(normalized)) {
+                    linkedinSet.add(normalized);
+                    linkedinList.push(url.trim());
+                }
+            }
+
+            return {
+                emails: Array.from(emailMap.values()),
+                phones: Array.from(phoneMap.values()),
+                socialLinks: Array.from(socialMap.values()),
+                serpLinks: { linkedin: linkedinList }
+            };
+        }
+
         // ====== EMAIL EXTRACTOR - MULTI-SOURCE PROFESSIONAL ENGINE ======
         const EmailExtractor = {
             // Debug mode
@@ -1586,56 +1634,60 @@
         function fastAutosave(results) {
             if (!isExtensionValid()) return;
             safeStorageGet(['saved'], (data) => {
-                const saved = data.saved || { emails: [], phones: [], socialLinks: [], serpLinks: { linkedin: [] } };
+                // First, clean any existing duplicates from storage
+                const saved = cleanDuplicates(data.saved || { emails: [], phones: [], socialLinks: [], serpLinks: { linkedin: [] } });
 
-                // Fast merge using Set for deduplication
-                const emailSet = new Set(saved.emails.map(e => typeof e === 'string' ? e : e?.email).filter(Boolean));
-                const phoneSet = new Set(saved.phones.map(p => typeof p === 'string' ? p : p?.phone).filter(Boolean));
-                const socialSet = new Set(saved.socialLinks.map(s => s?.url || s).filter(Boolean));
-                const linkedinSet = new Set(saved.serpLinks?.linkedin || []);
+                // Build sets from cleaned data for fast lookup
+                const emailSet = new Set(saved.emails.map(e => (e?.email || '').toLowerCase().trim()).filter(Boolean));
+                const phoneSet = new Set(saved.phones.map(p => (p?.phone || '').replace(/\D/g, '')).filter(Boolean));
+                const socialSet = new Set(saved.socialLinks.map(s => (s?.url || s || '').toLowerCase().trim()).filter(Boolean));
+                const linkedinSet = new Set(saved.serpLinks.linkedin.map(u => (u || '').toLowerCase().trim()).filter(Boolean));
 
-                // Add new items
-                let newEmails = 0, newPhones = 0, newSocials = 0;
+                // Track if we added anything new
+                let hasNewData = false;
 
-                results.emails?.forEach(e => {
-                    const email = typeof e === 'string' ? e : e?.email;
-                    if (email && !emailSet.has(email.toLowerCase())) {
-                        emailSet.add(email.toLowerCase());
-                        saved.emails.push(typeof e === 'string' ? { email: e, name: '' } : e);
-                        newEmails++;
+                // Add new emails
+                (results.emails || []).forEach(e => {
+                    const email = (typeof e === 'string' ? e : e?.email || '').toLowerCase().trim();
+                    if (email && !emailSet.has(email)) {
+                        emailSet.add(email);
+                        saved.emails.push(typeof e === 'string' ? { email: e.trim(), name: '' } : { email: (e.email || '').trim(), name: (e.name || '').trim() });
+                        hasNewData = true;
                     }
                 });
 
-                results.phones?.forEach(p => {
-                    const phone = typeof p === 'string' ? p : p?.phone;
-                    const normalized = String(phone).replace(/\D/g, '');
-                    if (normalized && !phoneSet.has(normalized)) {
-                        phoneSet.add(normalized);
-                        saved.phones.push(typeof p === 'string' ? { phone: p } : p);
-                        newPhones++;
+                // Add new phones
+                (results.phones || []).forEach(p => {
+                    const phone = (typeof p === 'string' ? p : p?.phone || '').replace(/\D/g, '');
+                    if (phone.length >= 7 && !phoneSet.has(phone)) {
+                        phoneSet.add(phone);
+                        saved.phones.push(typeof p === 'string' ? { phone: p.trim() } : { phone: (p?.phone || '').trim() });
+                        hasNewData = true;
                     }
                 });
 
-                results.socialLinks?.forEach(s => {
-                    const url = s?.url || s;
-                    if (url && !socialSet.has(url.toLowerCase())) {
-                        socialSet.add(url.toLowerCase());
+                // Add new social links
+                (results.socialLinks || []).forEach(s => {
+                    const url = (s?.url || s || '').toLowerCase().trim();
+                    if (url && !socialSet.has(url)) {
+                        socialSet.add(url);
                         saved.socialLinks.push(s);
-                        newSocials++;
+                        hasNewData = true;
                     }
                 });
 
-                results.serpLinks?.linkedin?.forEach(url => {
-                    if (url && !linkedinSet.has(url)) {
-                        linkedinSet.add(url);
-                        saved.serpLinks.linkedin.push(url);
+                // Add new LinkedIn links
+                (results.serpLinks?.linkedin || []).forEach(url => {
+                    const normalized = (url || '').toLowerCase().trim();
+                    if (normalized && !linkedinSet.has(normalized)) {
+                        linkedinSet.add(normalized);
+                        saved.serpLinks.linkedin.push((url || '').trim());
+                        hasNewData = true;
                     }
                 });
 
-                // Only save if we have new data
-                if (newEmails > 0 || newPhones > 0 || newSocials > 0) {
-                    safeStorageSet({ saved });
-                }
+                // Always save cleaned data (removes existing duplicates too)
+                safeStorageSet({ saved });
             });
         }
 
@@ -1709,16 +1761,18 @@
                         serpLinks: { linkedin: [] }
                     };
 
-                    // Helper: merge arrays with deduplication
+                    // Helper: merge arrays with deduplication (case-insensitive, trimmed)
                     const mergeUnique = (oldList, newList, keyFn) => {
                         const map = new Map();
                         for (const item of (oldList || [])) {
                             const key = keyFn(item);
-                            if (key) map.set(String(key).toLowerCase(), item);
+                            if (key) map.set(String(key).toLowerCase().trim(), item);
                         }
                         for (const item of (newList || [])) {
                             const key = keyFn(item);
-                            if (key) map.set(String(key).toLowerCase(), item);
+                            if (key && !map.has(String(key).toLowerCase().trim())) {
+                                map.set(String(key).toLowerCase().trim(), item);
+                            }
                         }
                         return Array.from(map.values());
                     };
@@ -1727,11 +1781,11 @@
                     // Ensure proper object format { email: '...', name: '...' }
                     const normalizeEmail = (e) => {
                         if (typeof e === 'string') {
-                            return { email: e, name: '' };
+                            return { email: e.trim(), name: '' };
                         } else if (e && typeof e === 'object') {
                             return {
-                                email: e.email || '',
-                                name: e.name || ''
+                                email: (e.email || '').trim(),
+                                name: (e.name || '').trim()
                             };
                         }
                         return null;
@@ -1743,24 +1797,31 @@
                         item => item.email
                     );
 
-                    // Merge phones (dedupe by phone number)
+                    // Merge phones (dedupe by phone number - digits only)
                     const mergedPhones = mergeUnique(
-                        existingSaved.phones,
-                        (results.phones || []).map(p => typeof p === 'string' ? { phone: p } : p),
-                        item => String(item.phone || item).replace(/\D/g, '')
+                        existingSaved.phones.map(p => typeof p === 'string' ? { phone: p.trim() } : { phone: (p?.phone || '').trim() }),
+                        (results.phones || []).map(p => typeof p === 'string' ? { phone: p.trim() } : { phone: (p?.phone || '').trim() }),
+                        item => String(item.phone || '').replace(/\D/g, '')
                     );
 
                     // Merge social links (dedupe by URL)
                     const mergedSocials = mergeUnique(
                         existingSaved.socialLinks,
                         results.socialLinks || [],
-                        item => item.url || item
+                        item => (item.url || item || '').trim()
                     );
 
-                    // Merge SERP LinkedIn links
-                    const existingLinkedIn = existingSaved.serpLinks?.linkedin || [];
-                    const newLinkedIn = results.serpLinks?.linkedin || [];
-                    const mergedLinkedIn = [...new Set([...existingLinkedIn, ...newLinkedIn])];
+                    // Merge SERP LinkedIn links (case-insensitive, trimmed)
+                    const linkedInSet = new Set(
+                        (existingSaved.serpLinks?.linkedin || []).map(u => u.toLowerCase().trim())
+                    );
+                    const mergedLinkedIn = [...existingSaved.serpLinks?.linkedin || []];
+                    for (const url of (results.serpLinks?.linkedin || [])) {
+                        if (url && !linkedInSet.has(url.toLowerCase().trim())) {
+                            linkedInSet.add(url.toLowerCase().trim());
+                            mergedLinkedIn.push(url.trim());
+                        }
+                    }
 
                     const mergedSaved = {
                         emails: mergedEmails,
