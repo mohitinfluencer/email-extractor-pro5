@@ -65,6 +65,27 @@
             }
         }
 
+        // Local Cache for Saved Data (to make deduplication/autosave blistering fast)
+        let localSavedCache = { emails: [], phones: [], socialLinks: [], serpLinks: { linkedin: [] } };
+
+        // Initialize cache
+        safeStorageGet(['saved'], (data) => {
+            if (data.saved) {
+                localSavedCache = cleanDuplicates(data.saved);
+            }
+        });
+
+        // Sync cache if storage changes (e.g. user deletes records from dashboard)
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+                chrome.storage.onChanged.addListener((changes, area) => {
+                    if (area === 'local' && changes.saved) {
+                        localSavedCache = cleanDuplicates(changes.saved.newValue || { emails: [], phones: [], socialLinks: [], serpLinks: { linkedin: [] } });
+                    }
+                });
+            }
+        } catch (e) { }
+
         // Helper: Clean duplicates from a saved data object
         function cleanDuplicates(saved) {
             // Dedupe emails (case-insensitive)
@@ -1618,7 +1639,7 @@
             // Clear existing timeout
             if (autosaveTimeout) clearTimeout(autosaveTimeout);
 
-            // Save after 50ms of no new extractions (fast debounce)
+            // Save after 10ms of no new extractions (blazing fast debounce)
             autosaveTimeout = setTimeout(() => {
                 if (pendingAutosave) {
                     const total = pendingAutosave.emails.length + pendingAutosave.phones.length + pendingAutosave.socialLinks.length;
@@ -1627,68 +1648,69 @@
                     }
                     pendingAutosave = null;
                 }
-            }, 50);
+            }, 10);
         }
 
-        // ====== FAST AUTOSAVE - Optimized for Speed ======
+        // ====== FAST AUTOSAVE - Optimized for Blazing Speed ======
         function fastAutosave(results) {
             if (!isExtensionValid()) return;
-            safeStorageGet(['saved'], (data) => {
-                // First, clean any existing duplicates from storage
-                const saved = cleanDuplicates(data.saved || { emails: [], phones: [], socialLinks: [], serpLinks: { linkedin: [] } });
 
-                // Build sets from cleaned data for fast lookup
-                const emailSet = new Set(saved.emails.map(e => (e?.email || '').toLowerCase().trim()).filter(Boolean));
-                const phoneSet = new Set(saved.phones.map(p => (p?.phone || '').replace(/\D/g, '')).filter(Boolean));
-                const socialSet = new Set(saved.socialLinks.map(s => (s?.url || s || '').toLowerCase().trim()).filter(Boolean));
-                const linkedinSet = new Set(saved.serpLinks.linkedin.map(u => (u || '').toLowerCase().trim()).filter(Boolean));
+            // Use our localSavedCache for instant deduplication (no storage guest waiting!)
+            const saved = localSavedCache;
 
-                // Track if we added anything new
-                let hasNewData = false;
+            // Build lookup sets from cache
+            const emailSet = new Set(saved.emails.map(e => (e?.email || '').toLowerCase().trim()).filter(Boolean));
+            const phoneSet = new Set(saved.phones.map(p => (p?.phone || '').replace(/\D/g, '')).filter(Boolean));
+            const socialSet = new Set(saved.socialLinks.map(s => (s?.url || s || '').toLowerCase().trim()).filter(Boolean));
+            const linkedinSet = new Set(saved.serpLinks.linkedin.map(u => (u || '').toLowerCase().trim()).filter(Boolean));
 
-                // Add new emails
-                (results.emails || []).forEach(e => {
-                    const email = (typeof e === 'string' ? e : e?.email || '').toLowerCase().trim();
-                    if (email && !emailSet.has(email)) {
-                        emailSet.add(email);
-                        saved.emails.push(typeof e === 'string' ? { email: e.trim(), name: '' } : { email: (e.email || '').trim(), name: (e.name || '').trim() });
-                        hasNewData = true;
-                    }
-                });
+            let hasNewData = false;
 
-                // Add new phones
-                (results.phones || []).forEach(p => {
-                    const phone = (typeof p === 'string' ? p : p?.phone || '').replace(/\D/g, '');
-                    if (phone.length >= 7 && !phoneSet.has(phone)) {
-                        phoneSet.add(phone);
-                        saved.phones.push(typeof p === 'string' ? { phone: p.trim() } : { phone: (p?.phone || '').trim() });
-                        hasNewData = true;
-                    }
-                });
-
-                // Add new social links
-                (results.socialLinks || []).forEach(s => {
-                    const url = (s?.url || s || '').toLowerCase().trim();
-                    if (url && !socialSet.has(url)) {
-                        socialSet.add(url);
-                        saved.socialLinks.push(s);
-                        hasNewData = true;
-                    }
-                });
-
-                // Add new LinkedIn links
-                (results.serpLinks?.linkedin || []).forEach(url => {
-                    const normalized = (url || '').toLowerCase().trim();
-                    if (normalized && !linkedinSet.has(normalized)) {
-                        linkedinSet.add(normalized);
-                        saved.serpLinks.linkedin.push((url || '').trim());
-                        hasNewData = true;
-                    }
-                });
-
-                // Always save cleaned data (removes existing duplicates too)
-                safeStorageSet({ saved });
+            // Add new items
+            (results.emails || []).forEach(e => {
+                const email = (typeof e === 'string' ? e : e?.email || '').toLowerCase().trim();
+                if (email && !emailSet.has(email)) {
+                    emailSet.add(email);
+                    saved.emails.push(typeof e === 'string' ? { email: e.trim(), name: '' } : { email: (e.email || '').trim(), name: (e.name || '').trim() });
+                    hasNewData = true;
+                }
             });
+
+            (results.phones || []).forEach(p => {
+                const phone = (typeof p === 'string' ? p : p?.phone || '').replace(/\D/g, '');
+                if (phone.length >= 7 && !phoneSet.has(phone)) {
+                    phoneSet.add(phone);
+                    saved.phones.push(typeof p === 'string' ? { phone: p.trim() } : { phone: (p?.phone || '').trim() });
+                    hasNewData = true;
+                }
+            });
+
+            (results.socialLinks || []).forEach(s => {
+                const url = (s?.url || s || '').toLowerCase().trim();
+                if (url && !socialSet.has(url)) {
+                    socialSet.add(url);
+                    saved.socialLinks.push(s);
+                    hasNewData = true;
+                }
+            });
+
+            (results.serpLinks?.linkedin || []).forEach(url => {
+                const normalized = (url || '').toLowerCase().trim();
+                if (normalized && !linkedinSet.has(normalized)) {
+                    linkedinSet.add(normalized);
+                    saved.serpLinks.linkedin.push((url || '').trim());
+                    hasNewData = true;
+                }
+            });
+
+            // Only save if we have new data
+            if (hasNewData) {
+                // Update local cache immediately
+                localSavedCache = saved;
+                // Write to storage asynchronously (don't block the UI)
+                safeStorageSet({ saved: localSavedCache });
+                console.log('[Email Extractor Pro] Blazing fast autosave complete');
+            }
         }
 
         // ====== AUTO-EXTRACTION ON PAGE LOAD ======

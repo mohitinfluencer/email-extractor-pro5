@@ -279,8 +279,20 @@ function setupEventListeners() {
     });
 
     // Live copy/clear
-    document.getElementById('copyLiveEmails').addEventListener('click', () =>
-        copyToClipboard(state.results.emails?.join('\n'), 'Emails copied!'));
+    document.getElementById('copyLiveEmails').addEventListener('click', () => {
+        const emails = state.results.emails || [];
+        const includeNames = state.settings.generateNames;
+        const formatted = emails.map(e => {
+            const email = typeof e === 'string' ? e : (e?.email || '');
+            if (!email) return '';
+            if (includeNames) {
+                const name = (typeof e === 'object' && e?.name) ? e.name : (window.NameGenerator?.generate(email) || '');
+                return name ? `${email}\t${name}` : email;
+            }
+            return email;
+        }).filter(Boolean).join('\n');
+        copyToClipboard(formatted, 'Emails copied!');
+    });
     document.getElementById('clearLiveEmails').addEventListener('click', async () => {
         await Storage.clearResults('emails');
         state.results.emails = [];
@@ -319,8 +331,20 @@ function setupEventListeners() {
         copyToClipboard(state.results.serpLinks?.linkedin?.join('\n'), 'SERP links copied!'));
 
     // Saved copy/clear
-    document.getElementById('copySavedEmails').addEventListener('click', () =>
-        copyToClipboard(state.saved.emails?.map(e => typeof e === 'string' ? e : e?.email).filter(Boolean).join('\n'), 'Emails copied!'));
+    document.getElementById('copySavedEmails').addEventListener('click', () => {
+        const emails = state.saved.emails || [];
+        const includeNames = state.settings.generateNames;
+        const formatted = emails.map(e => {
+            const email = typeof e === 'string' ? e : (e?.email || '');
+            if (!email) return '';
+            if (includeNames) {
+                const name = (typeof e === 'object' && e?.name) ? e.name : (window.NameGenerator?.generate(email) || '');
+                return name ? `${email}\t${name}` : email;
+            }
+            return email;
+        }).filter(Boolean).join('\n');
+        copyToClipboard(formatted, 'Emails copied!');
+    });
     document.getElementById('clearSavedEmails').addEventListener('click', async () => {
         await Storage.clearSaved('emails');
         state.saved.emails = [];
@@ -791,7 +815,11 @@ function createEmailItem(emailData, isSaved = false) {
     </div>
   `;
 
-    div.querySelector('.item-copy').addEventListener('click', () => copyToClipboard(email, 'Email copied!'));
+    div.querySelector('.item-copy').addEventListener('click', () => {
+        const includeNames = state.settings.generateNames;
+        const copyText = (includeNames && name) ? `${email}\t${name}` : email;
+        copyToClipboard(copyText, 'Email copied!');
+    });
     if (isSaved) {
         div.querySelector('.item-delete').addEventListener('click', async () => {
             await Storage.deleteSavedItem('emails', emailData);
@@ -881,8 +909,16 @@ function openModal(type, items, isSaved = false, title = '') {
     el.modalCopy.onclick = () => {
         let data;
         if (type === 'emails') {
-            // Handle both string and object email formats
-            data = items.map(e => typeof e === 'string' ? e : (e?.email || '')).filter(Boolean).join('\n');
+            const includeNames = state.settings.generateNames;
+            data = items.map(e => {
+                const email = typeof e === 'string' ? e : (e?.email || '');
+                if (!email) return '';
+                if (includeNames) {
+                    const name = (typeof e === 'object' && e?.name) ? e.name : (window.NameGenerator?.generate(email) || '');
+                    return name ? `${email}\t${name}` : email;
+                }
+                return email;
+            }).filter(Boolean).join('\n');
         } else if (type === 'socials') {
             data = items.map(l => l.url || l).join('\n');
         } else {
@@ -958,7 +994,15 @@ function renderModalItems(items) {
       </div>
     `;
 
-        div.querySelector('.item-copy').addEventListener('click', () => copyToClipboard(value, 'Copied!'));
+        div.querySelector('.item-copy').addEventListener('click', () => {
+            if (modalData.type === 'emails') {
+                const includeNames = state.settings.generateNames;
+                const copyText = (includeNames && name) ? `${value}\t${name}` : value;
+                copyToClipboard(copyText, 'Copied!');
+            } else {
+                copyToClipboard(value, 'Copied!');
+            }
+        });
 
         if (modalData.isSaved) {
             div.querySelector('.item-delete').addEventListener('click', async () => {
