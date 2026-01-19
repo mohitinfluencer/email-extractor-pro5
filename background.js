@@ -10,23 +10,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const tabId = sender.tab?.id;
 
         if (tabId) {
-            // Set badge text (show number, or empty if 0)
-            chrome.action.setBadgeText({
-                text: count > 0 ? String(count) : '',
-                tabId: tabId
-            });
+            try {
+                // Set badge text (show number, or empty if 0)
+                chrome.action.setBadgeText({
+                    text: count > 0 ? String(count) : '',
+                    tabId: tabId
+                }, () => {
+                    if (chrome.runtime.lastError) { /* Ignore - tab might be closed */ }
+                });
 
-            // Set badge background color (purple to match theme)
-            chrome.action.setBadgeBackgroundColor({
-                color: '#8B5CF6', // Purple
-                tabId: tabId
-            });
+                // Set badge background color (purple to match theme)
+                chrome.action.setBadgeBackgroundColor({
+                    color: '#8B5CF6', // Purple
+                    tabId: tabId
+                }, () => {
+                    if (chrome.runtime.lastError) { /* Ignore */ }
+                });
 
-            // Set badge text color (white)
-            chrome.action.setBadgeTextColor({
-                color: '#FFFFFF',
-                tabId: tabId
-            });
+                // Set badge text color (white)
+                chrome.action.setBadgeTextColor({
+                    color: '#FFFFFF',
+                    tabId: tabId
+                }, () => {
+                    if (chrome.runtime.lastError) { /* Ignore */ }
+                });
+            } catch (e) {
+                // Extension context or tab might be gone
+            }
         }
 
         sendResponse({ success: true });
@@ -38,10 +48,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Clear badge when tab is updated/navigated
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.status === 'loading') {
-        chrome.action.setBadgeText({
-            text: '',
-            tabId: tabId
-        });
+        try {
+            chrome.action.setBadgeText({
+                text: '',
+                tabId: tabId
+            }, () => {
+                if (chrome.runtime.lastError) { /* Ignore - tab might be closed */ }
+            });
+        } catch (e) {
+            // Ignore
+        }
     }
 });
 
